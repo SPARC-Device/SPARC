@@ -1,0 +1,13 @@
+QPushButton {
+    background-color: #3B4252;
+    color: #ECEFF4;
+    border: 2px solid #4C566A;
+    border-radius: 8px;
+    font-size: 18px;
+    padding: 12px 0;
+}
+QPushButton:focus, QPushButton[selected="true"] {
+    background-color: #88C0D0;
+    color: #2E3440;
+    border: 2px solid #81A1C1;
+}

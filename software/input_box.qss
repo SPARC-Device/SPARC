@@ -1,0 +1,8 @@
+QLabel#textDisplay, QLineEdit#textDisplay {
+    background-color: #ECEFF4;
+    color: #2E3440;
+    border: 2px solid #D8DEE9;
+    border-radius: 6px;
+    font-size: 22px;
+    padding: 8px 12px;
+} 
