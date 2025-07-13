@@ -14,10 +14,17 @@ String lastPopupChars[6];
 int popupWidth = 50;
 int popupSpacing = 5;
 int popupXPositions[6];
-const int popupBarY = 115;
+const int popupBarY = 130;              // Y position of popup bar (adjusted to be slightly lower)
 const int popupBarHeight = 30;
 
-// --- Layout Constants ---
+// cursor blinking 
+bool cursorVisible = true;
+unsigned long lastBlinkTime = 0;
+const unsigned long blinkInterval = 500;  // in milliseconds
+
+
+
+// Layout Constants
 const int keyWidth = 90;
 const int keyHeight = 60;
 const int spacing = 10;
@@ -44,7 +51,6 @@ void setup() {
   drawT9Grid();
 }
 
-
 void loop() {
   uint16_t tx, ty;
 
@@ -52,17 +58,19 @@ void loop() {
     if (tft.getTouch(&tx, &ty)) {
       int index = getPopupLetterIndexFromTouch(tx, ty);
       if (index != -1) {
-        // Highlight the selected popup box green
         int px = popupXPositions[index];
+
+        // Highlight selected box green
         tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, TFT_GREEN);
         tft.drawRect(px, popupBarY, popupWidth, popupBarHeight, TFT_WHITE);
-
         tft.setTextColor(TFT_BLACK, TFT_GREEN);
         tft.setTextSize(2);
-        String boxText = "[" + lastPopupChars[index] + "]";
+
+        String boxText = lastPopupChars[index];
         int tw = tft.textWidth(boxText);
         int tx = px + (popupWidth - tw) / 2;
-        int ty = popupBarY + (popupBarHeight / 2) +4;
+        int ty = popupBarY + (popupBarHeight / 2) - 6;
+
         tft.setCursor(tx, ty);
         tft.print(boxText);
 
@@ -76,10 +84,7 @@ void loop() {
           typedMessage += sel;
         }
 
-        // Redraw updated message bar
         drawMessageBox();
-
-        // Clear popup after selection
         clearPopupText();
         drawButton(activePopupIndex);
         popupActive = false;
@@ -88,7 +93,16 @@ void loop() {
       }
     }
 
-    // Timeout-based clearing
+      // Blink cursor every 500ms
+     if (millis() - lastBlinkTime >= blinkInterval) {
+             cursorVisible = !cursorVisible;
+             drawMessageBox();  // Redraw message + cursor
+             lastBlinkTime = millis();
+       }
+
+
+
+    // Clear popup after 3 seconds
     if (millis() - popupStartTime >= 3000) {
       clearPopupText();
       if (activePopupIndex != -1) drawButton(activePopupIndex);
@@ -100,20 +114,28 @@ void loop() {
   }
 }
 
-
-// --- Message Box ---
+// Draw message box at top
 void drawMessageBox() {
-  tft.fillRect(10, 10, 300, messageBoxHeight, TFT_NAVY);
+  tft.fillRect(10, 10, 300, messageBoxHeight, TFT_NAVY);  
   tft.drawRect(10, 10, 300, messageBoxHeight, TFT_WHITE);
   tft.setTextColor(TFT_WHITE, TFT_NAVY);
   tft.setTextSize(3);
   tft.setCursor(15, 25);
-  tft.print("                    "); // clear old message
-  tft.setCursor(15, 25);
   tft.print(typedMessage);
+
+  // Draw cursor if visible
+  if (cursorVisible) {
+    int textWidth = tft.textWidth(typedMessage);
+    int cursorX = 15 + textWidth;
+    int cursorY = 25;
+    int cursorHeight = 24;  // matches font size
+
+    tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
+  }
 }
 
-// --- T9 Grid ---
+
+// Draw the full keypad
 void drawT9Grid() {
   for (int i = 0; i < 12; i++) drawButton(i);
 }
@@ -122,7 +144,7 @@ void drawButton(int index) {
   int col = index % 3;
   int row = index / 3;
   int x = xOffset + col * (keyWidth + spacing);
-  int y = yOffset + row * (keyHeight + spacing) + 6;
+  int y = yOffset + row * (keyHeight + spacing);
 
   tft.fillRect(x, y, keyWidth, keyHeight, TFT_DARKGREY);
   tft.drawRect(x, y, keyWidth, keyHeight, TFT_WHITE);
@@ -137,7 +159,6 @@ void drawButton(int index) {
   tft.print(labels[index]);
 }
 
-// --- Touch Detection ---
 void handleTouch() {
   uint16_t x, y;
   if (tft.getTouch(&x, &y)) {
@@ -157,7 +178,7 @@ int getButtonIndexFromTouch(int touchX, int touchY) {
     int col = i % 3;
     int row = i / 3;
     int x = xOffset + col * (keyWidth + spacing);
-    int y = yOffset + row * (keyHeight + spacing) + 6;
+    int y = yOffset + row * (keyHeight + spacing);
 
     if (touchX >= x && touchX <= x + keyWidth &&
         touchY >= y && touchY <= y + keyHeight) {
@@ -167,12 +188,11 @@ int getButtonIndexFromTouch(int touchX, int touchY) {
   return -1;
 }
 
-// --- Highlight and Popup ---
 void highlightButton(int index) {
   int col = index % 3;
   int row = index / 3;
   int x = xOffset + col * (keyWidth + spacing);
-  int y = yOffset + row * (keyHeight + spacing) + 6;
+  int y = yOffset + row * (keyHeight + spacing);
 
   tft.fillRect(x, y, keyWidth, keyHeight, TFT_YELLOW);
   tft.drawRect(x, y, keyWidth, keyHeight, TFT_WHITE);
@@ -181,17 +201,18 @@ void highlightButton(int index) {
 
   int textWidth = tft.textWidth(labels[index]);
   int textX = x + (keyWidth - textWidth) / 2;
-  int textY = y + (keyHeight / 2) + 4 ;
+  int textY = y + (keyHeight / 2) + 4;
 
   tft.setCursor(textX, textY);
   tft.print(labels[index]);
 }
 
+// Draw the popup bar
 void drawPopup(int index) {
   String label = labels[index];
   label.trim();
-
   popupCount = 0;
+
   if (index == 10) {  // "0 _<-"
     lastPopupChars[popupCount++] = "0";
     lastPopupChars[popupCount++] = "_";
@@ -216,11 +237,10 @@ void drawPopup(int index) {
 
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
-
-    String boxText =  lastPopupChars[i] ;
+    String boxText = lastPopupChars[i];
     int tw = tft.textWidth(boxText);
     int tx = px + (popupWidth - tw) / 2;
-    int ty = popupBarY + (popupBarHeight / 2) + 4;
+    int ty = popupBarY + (popupBarHeight / 2) - 6;
 
     tft.setCursor(tx, ty);
     tft.print(boxText);
@@ -233,7 +253,6 @@ void clearPopupText() {
     tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, TFT_BLACK);
   }
 }
-
 
 int getPopupLetterIndexFromTouch(int x, int y) {
   for (int i = 0; i < popupCount; i++) {
