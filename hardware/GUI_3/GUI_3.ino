@@ -1,5 +1,6 @@
 #include <TFT_eSPI.h>
 #include <SPI.h>
+#include "emoji_arrays.h"  // Include the header generated from your Python script
 
 TFT_eSPI tft = TFT_eSPI();  // TFT instance
 
@@ -14,15 +15,13 @@ String lastPopupChars[6];
 int popupWidth = 50;
 int popupSpacing = 5;
 int popupXPositions[6];
-const int popupBarY = 130;              // Y position of popup bar (adjusted to be slightly lower)
+const int popupBarY = 130;
 const int popupBarHeight = 30;
 
 // cursor blinking 
 bool cursorVisible = true;
 unsigned long lastBlinkTime = 0;
-const unsigned long blinkInterval = 500;  // in milliseconds
-
-
+const unsigned long blinkInterval = 500;
 
 // Layout Constants
 const int keyWidth = 90;
@@ -32,12 +31,11 @@ const int xOffset = 15;
 const int yOffset = 180;
 const int messageBoxHeight = 100;
 
-// Labels for 12 buttons (Note: Added _ and <- to key "0")
 const char* labels[12] = {
   "1 ABC", "2 DEF", "3 GHI",
   "4 JKL", "5 MNO", "6 PQR",
   "7 STU", "8 VWX", "9 YZ",
-  "*", "0 _<-", "#"
+  "", "0 _<-", "#"
 };
 
 void setup() {
@@ -60,26 +58,24 @@ void loop() {
       if (index != -1) {
         int px = popupXPositions[index];
 
-        // Highlight selected box green
         tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, TFT_GREEN);
         tft.drawRect(px, popupBarY, popupWidth, popupBarHeight, TFT_WHITE);
         tft.setTextColor(TFT_BLACK, TFT_GREEN);
         tft.setTextSize(2);
 
-        String boxText = lastPopupChars[index];
-        int tw = tft.textWidth(boxText);
+        String sel = lastPopupChars[index];
+        int tw = tft.textWidth(sel);
         int tx = px + (popupWidth - tw) / 2;
         int ty = popupBarY + (popupBarHeight / 2) - 6;
-
         tft.setCursor(tx, ty);
-        tft.print(boxText);
+        tft.print(sel);
 
-        // Process selected character
-        String sel = lastPopupChars[index];
         if (sel == "<") {
           if (typedMessage.length()) typedMessage.remove(typedMessage.length() - 1);
         } else if (sel == "_") {
           typedMessage += " ";
+        } else if (sel == "toilet" || sel == "food" || sel == "doctor") {
+          typedMessage += sel;
         } else {
           typedMessage += sel;
         }
@@ -93,16 +89,12 @@ void loop() {
       }
     }
 
-      // Blink cursor every 500ms
-     if (millis() - lastBlinkTime >= blinkInterval) {
-             cursorVisible = !cursorVisible;
-             drawMessageBox();  // Redraw message + cursor
-             lastBlinkTime = millis();
-       }
+    if (millis() - lastBlinkTime >= blinkInterval) {
+      cursorVisible = !cursorVisible;
+      drawMessageBox();
+      lastBlinkTime = millis();
+    }
 
-
-
-    // Clear popup after 3 seconds
     if (millis() - popupStartTime >= 3000) {
       clearPopupText();
       if (activePopupIndex != -1) drawButton(activePopupIndex);
@@ -112,51 +104,6 @@ void loop() {
   } else {
     handleTouch();
   }
-}
-
-// Draw message box at top
-void drawMessageBox() {
-  tft.fillRect(10, 10, 300, messageBoxHeight, TFT_NAVY);  
-  tft.drawRect(10, 10, 300, messageBoxHeight, TFT_WHITE);
-  tft.setTextColor(TFT_WHITE, TFT_NAVY);
-  tft.setTextSize(3);
-  tft.setCursor(15, 25);
-  tft.print(typedMessage);
-
-  // Draw cursor if visible
-  if (cursorVisible) {
-    int textWidth = tft.textWidth(typedMessage);
-    int cursorX = 15 + textWidth;
-    int cursorY = 25;
-    int cursorHeight = 24;  // matches font size
-
-    tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
-  }
-}
-
-
-// Draw the full keypad
-void drawT9Grid() {
-  for (int i = 0; i < 12; i++) drawButton(i);
-}
-
-void drawButton(int index) {
-  int col = index % 3;
-  int row = index / 3;
-  int x = xOffset + col * (keyWidth + spacing);
-  int y = yOffset + row * (keyHeight + spacing);
-
-  tft.fillRect(x, y, keyWidth, keyHeight, TFT_DARKGREY);
-  tft.drawRect(x, y, keyWidth, keyHeight, TFT_WHITE);
-  tft.setTextColor(TFT_WHITE, TFT_DARKGREY);
-  tft.setTextSize(2);
-
-  int textWidth = tft.textWidth(labels[index]);
-  int textX = x + (keyWidth - textWidth) / 2;
-  int textY = y + (keyHeight / 2) + 4;
-
-  tft.setCursor(textX, textY);
-  tft.print(labels[index]);
 }
 
 void handleTouch() {
@@ -170,6 +117,51 @@ void handleTouch() {
       popupStartTime = millis();
       activePopupIndex = index;
     }
+  }
+}
+
+void drawMessageBox() {
+  tft.fillRect(10, 10, 300, messageBoxHeight, TFT_NAVY);  
+  tft.drawRect(10, 10, 300, messageBoxHeight, TFT_WHITE);
+  tft.setTextColor(TFT_WHITE, TFT_NAVY);
+  tft.setTextSize(3);
+  tft.setCursor(15, 25);
+  tft.print(typedMessage);
+
+  if (cursorVisible) {
+    int textWidth = tft.textWidth(typedMessage);
+    int cursorX = 15 + textWidth;
+    int cursorY = 25;
+    int cursorHeight = 24;
+    tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
+  }
+}
+
+void drawT9Grid() {
+  for (int i = 0; i < 12; i++) drawButton(i);
+}
+
+void drawButton(int index) {
+  int col = index % 3;
+  int row = index / 3;
+  int x = xOffset + col * (keyWidth + spacing);
+  int y = yOffset + row * (keyHeight + spacing);
+
+  tft.fillRect(x, y, keyWidth, keyHeight, TFT_DARKGREY);
+  tft.drawRect(x, y, keyWidth, keyHeight, TFT_WHITE);
+
+  if (index == 9) {
+    tft.pushImage(x + 5, y + 25, 24, 24, emoji_toilet);
+    tft.pushImage(x + 33, y + 25, 24, 24, emoji_food);
+    tft.pushImage(x + 61, y + 25, 24, 24, emoji_doctor);
+  } else {
+    tft.setTextColor(TFT_WHITE, TFT_DARKGREY);
+    tft.setTextSize(2);
+    int textWidth = tft.textWidth(labels[index]);
+    int textX = x + (keyWidth - textWidth) / 2;
+    int textY = y + (keyHeight / 2) + 4;
+    tft.setCursor(textX, textY);
+    tft.print(labels[index]);
   }
 }
 
@@ -202,27 +194,29 @@ void highlightButton(int index) {
   int textWidth = tft.textWidth(labels[index]);
   int textX = x + (keyWidth - textWidth) / 2;
   int textY = y + (keyHeight / 2) + 4;
-
   tft.setCursor(textX, textY);
   tft.print(labels[index]);
 }
 
-// Draw the popup bar
 void drawPopup(int index) {
-  String label = labels[index];
-  label.trim();
   popupCount = 0;
 
-  if (index == 10) {  // "0 _<-"
+  if (index == 9) {
+    lastPopupChars[popupCount++] = "toilet";
+    lastPopupChars[popupCount++] = "food";
+    lastPopupChars[popupCount++] = "doctor";
+    popupWidth = 80;
+  } else if (index == 10) {
     lastPopupChars[popupCount++] = "0";
     lastPopupChars[popupCount++] = "_";
     lastPopupChars[popupCount++] = "<";
+    popupWidth = 50;
   } else {
+    String label = labels[index];
     for (int i = 0; i < label.length(); i++) {
-      if (label[i] != ' ') {
-        lastPopupChars[popupCount++] = String(label[i]);
-      }
+      if (label[i] != ' ') lastPopupChars[popupCount++] = String(label[i]);
     }
+    popupWidth = 50;
   }
 
   int totalWidth = popupCount * popupWidth + (popupCount - 1) * popupSpacing;
@@ -231,17 +225,14 @@ void drawPopup(int index) {
   for (int i = 0; i < popupCount; i++) {
     int px = popupX + i * (popupWidth + popupSpacing);
     popupXPositions[i] = px;
-
     tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, TFT_BLACK);
     tft.drawRect(px, popupBarY, popupWidth, popupBarHeight, TFT_WHITE);
-
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
     String boxText = lastPopupChars[i];
     int tw = tft.textWidth(boxText);
     int tx = px + (popupWidth - tw) / 2;
     int ty = popupBarY + (popupBarHeight / 2) - 6;
-
     tft.setCursor(tx, ty);
     tft.print(boxText);
   }
