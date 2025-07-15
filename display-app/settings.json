@@ -1,5 +1,6 @@
 {
   "wifi_name": "bruh",
   "wifi_password": "bruh",
-  "blink_duration": 1000
+  "blink_duration": 2000,
+  "blink_gap": 300
 }

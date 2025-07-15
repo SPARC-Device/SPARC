@@ -1,25 +1,23 @@
 """
 @file
-@brief Implements the cell popup
+@brief Implements the cell popup (renamed to Popup)
 """
 
-
-from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout
-from PyQt5.QtCore import Qt, QTimer, QEvent
 import os
 
+from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout
+from PyQt5.QtCore import Qt, QEvent
 
-class CharacterPopup(QWidget):
+
+class Popup(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
+
         self.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.setFocusPolicy(Qt.NoFocus)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
-        # Apply popup stylesheet
-        self.setObjectName("CharacterPopup")
-        with open(os.path.join(os.path.dirname(__file__), "popup.qss"), "r") as f:
-            self.setStyleSheet(f.read())
+        self.setObjectName("Popup")
         self.installEventFilter(self)
 
         self.layout = QHBoxLayout()
@@ -28,7 +26,6 @@ class CharacterPopup(QWidget):
         self.char_labels = []
         self.current_index = 0
         self.char_list = []
-
 
     def show_popup(self, chars, anchor_widget):
         # Reset state
@@ -48,8 +45,6 @@ class CharacterPopup(QWidget):
                 label.setProperty("selected", True)
             else:
                 label.setProperty("selected", False)
-            label.style().unpolish(label)
-            label.style().polish(label)
             self.layout.addWidget(label)
             self.char_labels.append(label)
 
@@ -59,8 +54,8 @@ class CharacterPopup(QWidget):
         global_pos = anchor_widget.mapToGlobal(anchor_widget.rect().bottomLeft())
         self.move(global_pos.x(), global_pos.y() + 5)
         self.adjustSize()
-        self.show()
 
+        self.show()
 
     def update_highlight(self):
         for i, label in enumerate(self.char_labels):
@@ -68,9 +63,9 @@ class CharacterPopup(QWidget):
                 label.setProperty("selected", True)
             else:
                 label.setProperty("selected", False)
+
             label.style().unpolish(label)
             label.style().polish(label)
-
 
     def next_char(self):
         if not self.char_list:
@@ -78,12 +73,10 @@ class CharacterPopup(QWidget):
         self.current_index = (self.current_index + 1) % len(self.char_list)
         self.update_highlight()
 
-
     def get_selected_char(self):
         if not self.char_list:
             return ""
         return self.char_list[self.current_index]
-
 
     def hide_popup(self):
         self.hide()
@@ -93,5 +86,4 @@ class CharacterPopup(QWidget):
             if self.parent():
                 self.parent().keyPressEvent(event)
             return True
-        return super().eventFilter(obj, event)
-
+        return super().eventFilter(obj, event) 
