@@ -5,9 +5,9 @@
 
 import os
 
-from controller import Controller
-from popup import Popup
-from settings import Settings
+from src.controller import Controller
+from src.popup import Popup
+from src.settings import Settings
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QGridLayout, QPushButton,
@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon
+import pyttsx3
 
 
 T9_KEYS = {
@@ -44,7 +45,7 @@ class MainWidget(QWidget):
         self.setObjectName("MainWindow")
 
         # Apply main window stylesheet
-        with open(os.path.join(os.path.dirname(__file__), "main.qss"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "../styles/main.qss"), "r") as f:
             self.setStyleSheet(f.read())
 
         self.T9_KEYS = T9_KEYS
@@ -77,6 +78,8 @@ class MainWidget(QWidget):
         self.controller.set_buttons(self.buttons)
         self.controller.highlight_button(0)
 
+        self.tts_engine = pyttsx3.init()
+
     def init_main_ui(self):
         """Initialize the main T9 interface"""
         layout = QVBoxLayout()
@@ -104,7 +107,7 @@ class MainWidget(QWidget):
 
                 if key == "⚙":
                     btn = QPushButton()
-                    icon_path = os.path.join(os.path.dirname(__file__), "assets/settings.svg")
+                    icon_path = os.path.join(os.path.dirname(__file__), "../assets/settings.svg")
                     btn.setIcon(QIcon(icon_path))
                     btn.setIconSize(QSize(48, 48))
                     btn.setToolTip("Settings")
@@ -141,4 +144,10 @@ class MainWidget(QWidget):
 
     def keyPressEvent(self, event):
         self.controller.handle_key(event)
+        # After handling, check if last char is '.'
+        text = self.text_display.text()
+        if text.endswith('.'):
+            self.tts_engine.say(text)
+            self.tts_engine.runAndWait()
+            self.text_display.setText("")
         self.setFocus()

@@ -8,7 +8,7 @@
 import os
 import json
 
-from audio_manager import AudioManager
+from src.audio_manager import AudioManager
 
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QKeyEvent
@@ -37,7 +37,7 @@ class Controller:
     def load_blink_duration(self):
         """Load blink duration from settings.json"""
         try:
-            settings_file = os.path.join(os.path.dirname(__file__), "settings.json")
+            settings_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "settings.json")
             if os.path.exists(settings_file):
                 with open(settings_file, 'r') as f:
                     settings = json.load(f)

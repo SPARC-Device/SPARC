@@ -11,7 +11,7 @@ from PyQt5.QtCore import QUrl
 
 class AudioManager:
     def __init__(self):
-        assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        assets_dir = os.path.join(os.path.dirname(__file__), "../assets")
 
         self.move_effect = QSoundEffect()
         self.move_effect.setSource(QUrl.fromLocalFile(os.path.join(assets_dir, "move.wav")))
