@@ -62,7 +62,7 @@ const char* labels[12] = {
   "1 ABC", "2 DEF", "3 GHI",
   "4 JKL", "5 MNO", "6 PQR",
   "7 STU", "8 VWX", "9 YZ",
-  "SAVE", "0 _<", "#"
+  "SAVE", "0 _<", "CLEAR"
 };
 
 bool popupActive = false;
@@ -133,9 +133,16 @@ void drawValueBar() {
   tft.drawRect(15, 50, 290, 40, TFT_WHITE);
   tft.fillRect(16, 51, 288, 38, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
-  if (editField == 0 || editField == 1) tft.setCursor(-100, 30); // Name or Password  x,y for text in second interface
+  if (editField == 0 || editField == 1) tft.setCursor(23, 70); // Name or Password  x,y for text in second interface
   else tft.setCursor(23, 70); // Valid Blink or Consecutive Gap
   tft.print(editBuffer);
+}
+
+// Function to clear the popup bar area
+void clearPopupBar() {
+  int popupBarY = 100;
+  int popupBarHeight = 40;
+  tft.fillRect(0, popupBarY, 320, popupBarHeight, TFT_BLACK);
 }
 
 void drawT9Grid() {
@@ -204,6 +211,8 @@ void enterEditScreen(int field) {
   selectedT9Key = -1;
   selectedPopupLetter = -1;
   inEditScreen = true;
+  popupActive = false; // Ensure popup is not active
+  popupStartTime = 0;
   switch (field) {
     case 0: editBuffer = typedSSID; break;
     case 1: editBuffer = typedPassword; break;
@@ -243,7 +252,7 @@ void drawMainUI() {
   tft.drawRect(15, 80, 290, 40, TFT_WHITE); // Full-width bar
   tft.fillRect(16, 81, 288, 38, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
-  tft.setCursor(-100, 64); // x=-100, y=64
+  tft.setCursor(20, 100); // x=20, y=100
   tft.print(typedSSID);
 
   // Password label and bar
@@ -253,7 +262,7 @@ void drawMainUI() {
   tft.drawRect(15, 170, 290, 40, TFT_WHITE); // Full-width bar
   tft.fillRect(16, 171, 288, 38, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
-  tft.setCursor(-100, 154); // x=-100, y=154
+  tft.setCursor(20, 190); // x=20, y=190
   tft.print(typedPassword);
 
   // Lower: Blink Settings (bottom half)
@@ -398,6 +407,7 @@ void handleTouch() {
       int popupSpacing = 5;
       int totalWidth = popupCount * popupWidth + (popupCount - 1) * popupSpacing;
       int popupX = (320 - totalWidth) / 2;
+      bool touchedPopup = false;
       for (int i = 0; i < popupCount; i++) {
         int px = popupX + i * (popupWidth + popupSpacing);
         if (tx >= px && tx <= px + popupWidth && ty >= popupBarY && ty <= popupBarY + 40) {
@@ -415,10 +425,34 @@ void handleTouch() {
           }
           selectedT9Key = -1;
           selectedPopupLetter = -1;
+          popupActive = false;
+          popupStartTime = 0;
+          clearPopupBar();
           drawValueBar(); // Only redraw value bar
           drawT9Grid();   // Only redraw T9 grid
           return;
         }
+      }
+      // If popup bar is up but not touched, and user taps outside popup bar and T9 grid, clear popup and deselect cell
+      // Check if touch is outside popup bar and T9 grid
+      int t9Y = 160;
+      bool inT9Grid = false;
+      for (int i = 0; i < 12; i++) {
+        int col = i % 3;
+        int row = i / 3;
+        int x = 15 + col * (90 + 10);
+        int y = t9Y + row * (60 + 10);
+        if (tx >= x && tx <= x + 90 && ty >= y && ty <= y + 60) inT9Grid = true;
+      }
+      if (!(ty >= popupBarY && ty <= popupBarY + 40) && !inT9Grid) {
+        selectedT9Key = -1;
+        selectedPopupLetter = -1;
+        popupActive = false;
+        popupStartTime = 0;
+        drawT9Grid();
+        drawValueBar();
+        clearPopupBar();
+        return;
       }
       // If popup bar is up but not touched, ignore
       return;
@@ -431,17 +465,49 @@ void handleTouch() {
       int x = 15 + col * (90 + 10);
       int y = t9Y + row * (60 + 10);
       if (tx >= x && tx <= x + 90 && ty >= y && ty <= y + 60) {
+        if (i == 11) { // CLEAR key
+          // Draw CLEAR key in red for feedback
+          tft.fillRect(x, y, 90, 60, TFT_RED);
+          tft.drawRect(x, y, 90, 60, TFT_WHITE);
+          tft.setTextColor(TFT_WHITE);
+          tft.setTextSize(2);
+          int textWidth = tft.textWidth(labels[i]);
+          tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+          tft.print(labels[i]);
+          delay(120);
+          editBuffer = "";
+          drawValueBar();
+          selectedT9Key = -1;
+          selectedPopupLetter = -1;
+          popupActive = false;
+          popupStartTime = 0;
+          drawT9Grid();
+          return;
+        }
+        if (i == 9) { // SAVE key
+          // Draw SAVE key in green for feedback
+          tft.fillRect(x, y, 90, 60, TFT_GREEN);
+          tft.drawRect(x, y, 90, 60, TFT_WHITE);
+          tft.setTextColor(TFT_WHITE);
+          tft.setTextSize(2);
+          int textWidth = tft.textWidth(labels[i]);
+          tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+          tft.print(labels[i]);
+          delay(120);
+          saveEditBuffer();
+          inEditScreen = false;
+          popupActive = false;
+          popupStartTime = 0;
+          drawMainUI();
+          return;
+        }
         selectedT9Key = i;
+        popupActive = true;
+        popupStartTime = millis();
         drawT9Grid(); // Only redraw T9 grid for highlight
         drawPopupBar(); // Only draw popup bar
         delay(120); // Visual feedback
         // If SAVE key (index 9)
-        if (i == 9) {
-          saveEditBuffer();
-          inEditScreen = false;
-          drawMainUI();
-          return;
-        }
         // Show popup bar for this key
         selectedPopupLetter = -1;
         drawPopupBar();
@@ -466,4 +532,16 @@ void setup() {
 
 void loop() {
   handleTouch();
+  // --- Popup timeout logic ---
+  if (inEditScreen && popupActive && selectedT9Key != -1 && popupStartTime > 0) {
+    if (millis() - popupStartTime > 2000) { // 2 seconds timeout
+      selectedT9Key = -1;
+      selectedPopupLetter = -1;
+      popupActive = false;
+      popupStartTime = 0;
+      drawT9Grid();
+      drawValueBar();
+      clearPopupBar();
+    }
+  }
 }
