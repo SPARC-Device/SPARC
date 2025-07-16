@@ -1,1 +1,0 @@
-../display-app/notif.py
