@@ -2,11 +2,13 @@ from google.oauth2 import service_account
 import google.auth.transport.requests
 import requests
 import json
+import os
 
 class FCMNotifier:
-    def __init__(self, service_account_path, project_id):
+    def __init__(self, service_account_path, project_id, settings_path="settings.json"):
         self.service_account_path = service_account_path
         self.project_id = project_id
+        self.settings_path = settings_path
         self._access_token = None
         self._creds = None
         self._refresh_token()
@@ -20,12 +22,20 @@ class FCMNotifier:
         self._creds.refresh(request)
         self._access_token = self._creds.token
 
-    def send_push_notification(self, device_token, title, body, data=None):
+    def send_topic_notification(self, title, body, data=None):
+        # Load userID from settings.json
+        if not os.path.exists(self.settings_path):
+            raise FileNotFoundError(f"Settings file not found: {self.settings_path}")
+        with open(self.settings_path, 'r') as f:
+            settings = json.load(f)
+        topic = settings.get('userID')
+        if not topic:
+            raise ValueError("userID (topic) not found in settings.json")
         if not self._access_token or self._creds.expired:
             self._refresh_token()
         message = {
             "message": {
-                "token": device_token,
+                "topic": topic,
                 "notification": {
                     "title": title,
                     "body": body
@@ -48,10 +58,9 @@ class FCMNotifier:
 
 # Example usage (remove or comment out in production):
 # notifier = FCMNotifier('service-account.json', 'sparc-8b7af')
-# status, resp = notifier.send_push_notification(
-#     device_token="cchRRTQ6QruqmOvtWxErUI:APA91bH02wAaNRUNG0m8mf_jFJv_0pny5wnd2JdtePCK8kfYbfd8qkr12vOY1rP9gJu9U0X6cMQQ9nf7nTvG_P4nUnuU3Ub7DE808T_hVAxAd_sbTja8Pr4",
+# status, resp = notifier.send_topic_notification(
 #     title="Hello",
-#     body="This is a v1 API push"
+#     body="This is a topic push notification"
 # )
 # print(status, resp)
 

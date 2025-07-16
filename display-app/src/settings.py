@@ -92,6 +92,11 @@ class Settings(QWidget):
         blink_group.setLayout(main_layout)
         layout.addWidget(blink_group)
 
+        # Add userID display after blink settings
+        self.user_id_label = QLabel("")
+        self.user_id_label.setProperty("class", "user-id")
+        layout.addWidget(self.user_id_label)
+
         # Create group box
         gap_group = QGroupBox("Gap Duration")
         gap_group.setObjectName("gapGroup")
@@ -155,12 +160,14 @@ class Settings(QWidget):
             if os.path.exists(self.settings_file):
                 with open(self.settings_file, 'r') as f:
                     settings = json.load(f)
-                    self.wifi_name_input.setText(settings.get('wifi_name', ''))
-                    self.wifi_password_input.setText(settings.get('wifi_password', ''))
-                    self.blink_duration = settings.get('blink_duration', 1000)
-                    self.gap_duration = settings.get('blink_gap', 300)
+                    self.wifi_name_input.setText(settings.get('wifi_ssid', ''))
+                    self.wifi_password_input.setText(settings.get('password', ''))
+                    self.blink_duration = settings.get('minBlinkDuration', 1000)
+                    self.gap_duration = settings.get('blinkInterval', 300)
                     self.update_blink_duration_label()
                     self.gap_duration_label.setText(f"{self.gap_duration} ms")
+                    user_id = settings.get('userID', '')
+                    self.user_id_label.setText(f"User ID: {user_id}")
         except Exception as e:
             print(f"Error loading settings: {e}")
 
@@ -169,14 +176,23 @@ class Settings(QWidget):
             # Play save sound
             self._play_audio('play_save')
             settings = {
-                'wifi_name': self.wifi_name_input.text(),
-                'wifi_password': self.wifi_password_input.text(),
-                'blink_duration': self.blink_duration,
-                'blink_gap': self.gap_duration
+                'wifi_ssid': self.wifi_name_input.text(),
+                'password': self.wifi_password_input.text(),
+                'minBlinkDuration': self.blink_duration,
+                'blinkInterval': self.gap_duration
             }
             with open(self.settings_file, 'w') as f:
                 json.dump(settings, f, indent=2)
             print("Settings saved successfully!")
+            # Send commands to hardware if network_manager is available
+            try:
+                from network_manager import NetworkManager
+                # You may want to pass the instance instead of importing
+                if hasattr(self, 'network_manager'):
+                    self.network_manager.send_setting('minBlinkDuration', self.blink_duration)
+                    self.network_manager.send_setting('blinkInterval', self.gap_duration)
+            except Exception as e:
+                print(f"Could not send settings to hardware: {e}")
             current_widget = self
             while current_widget.parent():
                 current_widget = current_widget.parent()
@@ -193,23 +209,29 @@ class Settings(QWidget):
     def increase_blink_duration(self):
         self._play_audio('play_plus')
         self.blink_duration += 50
-        if self.blink_duration > 5000:
-            self.blink_duration = 5000
+        if self.blink_duration > 2000:
+            self.blink_duration = 2000
         self.update_blink_duration_label()
 
     def decrease_blink_duration(self):
         self._play_audio('play_minus')
         self.blink_duration -= 50
-        if self.blink_duration < 500:
-            self.blink_duration = 500
+        if self.blink_duration < 100:
+            self.blink_duration = 100
         self.update_blink_duration_label()
 
     def increase_gap_duration(self):
+        self._play_audio('play_plus')
         self.gap_duration += 25
+        if self.gap_duration > 5000:
+            self.gap_duration = 5000
         self.gap_duration_label.setText(f"{self.gap_duration} ms")
 
     def decrease_gap_duration(self):
-        self.gap_duration = max(0, self.gap_duration - 25)  # prevent negative values
+        self._play_audio('play_minus')
+        self.gap_duration -= 25
+        if self.gap_duration < 500:
+            self.gap_duration = 500
         self.gap_duration_label.setText(f"{self.gap_duration} ms")
 
     def go_back(self, play_cancel=True):

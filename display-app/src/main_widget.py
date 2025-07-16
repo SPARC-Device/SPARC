@@ -142,12 +142,23 @@ class MainWidget(QWidget):
         self.stacked_widget.setCurrentWidget(self.main_widget)
         self.setFocus()
 
-    def keyPressEvent(self, event):
-        self.controller.handle_key(event)
-        # After handling, check if last char is '.'
-        text = self.text_display.text()
-        if text.endswith('.'):
-            self.tts_engine.say(text)
-            self.tts_engine.runAndWait()
-            self.text_display.setText("")
-        self.setFocus()
+    def on_special_key(self, char):
+        # Send notification for special keys
+        if char == "🍽️":
+            body = "Meal notification triggered by user."
+        elif char == "🚽":
+            body = "Restroom notification triggered by user."
+        elif char == "📞":
+            body = "Call notification triggered by user."
+        else:
+            body = "Special notification triggered by user."
+        try:
+            from notif import FCMNotifier
+            notifier = FCMNotifier('service-account.json', 'sparc-8b7af')
+            status, resp = notifier.send_topic_notification(
+                title="User Request",
+                body=body
+            )
+            print(f"Notification sent: {status}, {resp}")
+        except Exception as e:
+            print(f"Failed to send notification: {e}")

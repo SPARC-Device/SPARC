@@ -33,7 +33,6 @@ if __name__ == "__main__":
 
     # Initialize FCMNotifier (update with your actual values)
     notifier = FCMNotifier('service-account.json', 'sparc-8b7af')
-    DEVICE_TOKEN = "YOUR_DEVICE_TOKEN_HERE"  # Replace with actual device token
 
     # Wait for connection and initial settings before launching GUI
     app = QApplication(sys.argv)
@@ -72,12 +71,33 @@ if __name__ == "__main__":
                 window.keyPressEvent(event)
             elif ir_value == 4:
                 print("Emergency! Send notification to Firebase.")
-                status, resp = notifier.send_push_notification(
-                    device_token=DEVICE_TOKEN,
+                status, resp = notifier.send_topic_notification(
                     title="Emergency Alert!",
                     body="Emergency IR signal received from user."
                 )
                 print(f"Notification sent: {status}, {resp}")
         network_manager.ir_signal.connect(handle_ir)
+
+    # Patch MainWidget to send notification on special key
+    orig_keyPressEvent = window.keyPressEvent
+    def patched_keyPressEvent(event):
+        orig_keyPressEvent(event)
+        # Check for special keys after handling
+        text = window.text_display.text()
+        if text and text[-1] in ["🍽️", "🚽", "📞"]:
+            if text[-1] == "🍽️":
+                body = "Meal notification triggered by user."
+            elif text[-1] == "🚽":
+                body = "Restroom notification triggered by user."
+            elif text[-1] == "📞":
+                body = "Call notification triggered by user."
+            else:
+                body = "Special notification triggered by user."
+            status, resp = notifier.send_topic_notification(
+                title="User Request",
+                body=body
+            )
+            print(f"Notification sent: {status}, {resp}")
+    window.keyPressEvent = patched_keyPressEvent
     window.show()
     sys.exit(app.exec_())

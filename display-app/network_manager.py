@@ -61,32 +61,41 @@ class NetworkWorker(QObject):
             self.sock = None
 
     def parse_initial_settings(self, data):
+        # Format: {minBlinkDuration};{blinkInterval};{wifi_ssid};{password};{userID}
         settings = {}
-        for line in data.decode(errors='ignore').splitlines():
-            if ':' in line:
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip().replace('ms', '')
-                try:
-                    settings[key] = int(value)
-                except ValueError:
-                    settings[key] = value
+        try:
+            decoded = data.decode(errors='ignore').strip()
+            parts = decoded.split(';')
+            if len(parts) == 5:
+                settings['minBlinkDuration'] = int(parts[0])
+                settings['blinkInterval'] = int(parts[1])
+                settings['wifi_ssid'] = parts[2]
+                settings['password'] = parts[3]
+                settings['userID'] = parts[4]
+        except Exception as e:
+            print(f"Error parsing initial settings: {e}")
         return settings
 
     def save_settings(self, new_settings):
-        # Merge with existing settings.json
+        # Only save the relevant keys
+        keys = ['minBlinkDuration', 'blinkInterval', 'wifi_ssid', 'password', 'userID']
+        settings = {k: new_settings.get(k) for k in keys if k in new_settings}
         if os.path.exists(self.settings_path):
             with open(self.settings_path, 'r') as f:
-                settings = json.load(f)
-        else:
-            settings = {}
-        settings.update(new_settings)
+                existing = json.load(f)
+            existing.update(settings)
+            settings = existing
         with open(self.settings_path, 'w') as f:
             json.dump(settings, f, indent=2)
 
     def send_setting(self, key, value):
         if self.sock:
-            msg = f"{key}={value}".encode()
+            if key == 'minBlinkDuration':
+                msg = f"SET_MINBLINK:{value}".encode()
+            elif key == 'blinkInterval':
+                msg = f"SET_BLINKINT:{value}".encode()
+            else:
+                msg = f"{key}={value}".encode()
             self.sock.sendall(msg)
 
     def send_wifi(self, ssid, password):

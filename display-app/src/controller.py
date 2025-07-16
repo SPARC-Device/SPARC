@@ -106,7 +106,14 @@ class Controller:
                         self.timer.start(2000)
 
                     case "char_select":
-                        match (char := self.popup.get_selected_char()):
+                        char = self.popup.get_selected_char()
+                        # If char is a notification key, trigger notification and do not type
+                        if char in ["🍽️", "🚽", "📞"]:
+                            if hasattr(self.window, 'on_special_key'):
+                                self.window.on_special_key(char)
+                            self.reset_to_grid()
+                            return
+                        match char:
                             case "←":
                                 text = self.window.text_display.text()
                                 self.window.text_display.setText(text[:-1])
