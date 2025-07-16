@@ -246,12 +246,12 @@ void drawMainMenu() {
   int segmentHeight = 480 / 3;
   // WiFi Settings segment
   tft.setTextColor(TFT_YELLOW);
-  tft.setCursor(20, segmentHeight/2 - 16);
+  tft.setCursor(50, segmentHeight/2 - 16);
   tft.print("WiFi Settings ->");
   tft.drawRect(10, 10, 300, segmentHeight-20, TFT_WHITE);
   // Blink Settings segment
   tft.setTextColor(TFT_YELLOW);
-  tft.setCursor(20, segmentHeight + segmentHeight/2 - 16);
+  tft.setCursor(50, segmentHeight + segmentHeight/2 - 16);
   tft.print("Blink Settings ->");
   tft.drawRect(10, segmentHeight+10, 300, segmentHeight-20, TFT_WHITE);
   // User ID segment
@@ -307,22 +307,58 @@ void drawBlinkMenu() {
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(15, 50);
   tft.print("Valid Blink");
-  tft.drawRect(15, 80, 290, 40, TFT_WHITE);
-  tft.fillRect(16, 81, 288, 38, TFT_BLACK);
+  // Shorter bar: 180px wide, centered
+  int barX = 70;
+  int barY1 = 80;
+  int barW = 180;
+  int barH = 40;
+  tft.drawRect(barX, barY1, barW, barH, TFT_WHITE);
+  tft.fillRect(barX+1, barY1+1, barW-2, barH-2, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
-  tft.setCursor(20, 100);
+  tft.setCursor(barX+10, barY1+20-8);
   tft.print(String(minBlinkDuration));
+  // '-' button
+  tft.fillRect(barX-40, barY1, 35, barH, TFT_DARKGREY);
+  tft.drawRect(barX-40, barY1, 35, barH, TFT_WHITE);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(barX-30, barY1+8);
+  tft.print("-");
+  // '+' button
+  tft.fillRect(barX+barW+5, barY1, 35, barH, TFT_DARKGREY);
+  tft.drawRect(barX+barW+5, barY1, 35, barH, TFT_WHITE);
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(barX+barW+15, barY1+8);
+  tft.print("+");
+
   // Consecutive Gap label and bar
   tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(2);
   tft.setCursor(15, 140);
   tft.print("Consecutive Gap");
-  tft.drawRect(15, 170, 290, 40, TFT_WHITE);
-  tft.fillRect(16, 171, 288, 38, TFT_BLACK);
+  int barY2 = 170;
+  tft.drawRect(barX, barY2, barW, barH, TFT_WHITE);
+  tft.fillRect(barX+1, barY2+1, barW-2, barH-2, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
-  tft.setCursor(20, 190);
+  tft.setCursor(barX+10, barY2+20-8);
   tft.print(String(consecutiveGap));
+  // '-' button
+  tft.fillRect(barX-40, barY2, 35, barH, TFT_DARKGREY);
+  tft.drawRect(barX-40, barY2, 35, barH, TFT_WHITE);
+  tft.setTextColor(TFT_WHITE);
+  tft.setTextSize(3);
+  tft.setCursor(barX-30, barY2+8);
+  tft.print("-");
+  // '+' button
+  tft.fillRect(barX+barW+5, barY2, 35, barH, TFT_DARKGREY);
+  tft.drawRect(barX+barW+5, barY2, 35, barH, TFT_WHITE);
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(barX+barW+15, barY2+8);
+  tft.print("+");
+
   // Back button
   tft.setTextColor(TFT_YELLOW);
+  tft.setTextSize(2);
   tft.drawRect(10, 420, 100, 40, TFT_WHITE);
   tft.setCursor(30, 430);
   tft.print("Back");
@@ -516,13 +552,79 @@ void handleTouch() {
   if (uiState == 2) { // Blink menu
     if (tft.getTouch(&tx, &ty)) {
       // Valid Blink bar
-      if (tx >= 15 && tx <= 305 && ty >= 80 && ty <= 120) {
+      int barX = 70;
+      int barY1 = 80;
+      int barY2 = 170;
+      int barW = 180;
+      int barH = 40;
+      // Valid Blink '-' button
+      if (tx >= barX-55 && tx <= barX-5 && ty >= barY1 && ty <= barY1+barH) {
+        // Draw '-' button in red for feedback
+        tft.fillRect(barX-40, barY1, 35, barH, TFT_RED);
+        tft.drawRect(barX-40, barY1, 35, barH, TFT_WHITE);
+        tft.setTextColor(TFT_WHITE);
+        tft.setTextSize(3);
+        tft.setCursor(barX-30, barY1+8);
+        tft.print("-");
+        delay(120);
+        minBlinkDuration = (minBlinkDuration >= 10) ? minBlinkDuration-10 : 0;
+        saveConfigToEEPROM();
+        drawBlinkMenu();
+        return;
+      }
+      // Valid Blink '+' button
+      if (tx >= barX+barW+5 && tx <= barX+barW+40 && ty >= barY1 && ty <= barY1+barH) {
+        // Draw '+' button in green for feedback
+        tft.fillRect(barX+barW+5, barY1, 35, barH, TFT_GREEN);
+        tft.drawRect(barX+barW+5, barY1, 35, barH, TFT_WHITE);
+        tft.setTextColor(TFT_WHITE);
+        tft.setTextSize(3);
+        tft.setCursor(barX+barW+15, barY1+8);
+        tft.print("+");
+        delay(120);
+        minBlinkDuration += 10;
+        saveConfigToEEPROM();
+        drawBlinkMenu();
+        return;
+      }
+      // Valid Blink bar (edit)
+      if (tx >= barX && tx <= barX+barW && ty >= barY1 && ty <= barY1+barH) {
         enterEditScreen(2);
         uiState = 3;
         return;
       }
-      // Consecutive Gap bar
-      if (tx >= 15 && tx <= 305 && ty >= 170 && ty <= 210) {
+      // Consecutive Gap '-' button
+      if (tx >= barX-55 && tx <= barX-5 && ty >= barY2 && ty <= barY2+barH) {
+        // Draw '-' button in red for feedback
+        tft.fillRect(barX-40, barY2, 35, barH, TFT_RED);
+        tft.drawRect(barX-40, barY2, 35, barH, TFT_WHITE);
+        tft.setTextColor(TFT_WHITE);
+        tft.setTextSize(3);
+        tft.setCursor(barX-30, barY2+8);
+        tft.print("-");
+        delay(120);
+        consecutiveGap = (consecutiveGap >= 10) ? consecutiveGap-10 : 0;
+        saveConfigToEEPROM();
+        drawBlinkMenu();
+        return;
+      }
+      // Consecutive Gap '+' button
+      if (tx >= barX+barW+5 && tx <= barX+barW+40 && ty >= barY2 && ty <= barY2+barH) {
+        // Draw '+' button in green for feedback
+        tft.fillRect(barX+barW+5, barY2, 35, barH, TFT_GREEN);
+        tft.drawRect(barX+barW+5, barY2, 35, barH, TFT_WHITE);
+        tft.setTextColor(TFT_WHITE);
+        tft.setTextSize(3);
+        tft.setCursor(barX+barW+15, barY2+8);
+        tft.print("+");
+        delay(120);
+        consecutiveGap += 10;
+        saveConfigToEEPROM();
+        drawBlinkMenu();
+        return;
+      }
+      // Consecutive Gap bar (edit)
+      if (tx >= barX && tx <= barX+barW && ty >= barY2 && ty <= barY2+barH) {
         enterEditScreen(3);
         uiState = 3;
         return;
@@ -646,7 +748,6 @@ void handleTouch() {
             inEditScreen = false;
             popupActive = false;
             popupStartTime = 0;
-            drawMainUI();
             return;
           }
           selectedT9Key = i;
