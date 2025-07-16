@@ -100,9 +100,30 @@ String readStringFromEEPROM(int addrOffset) {
   return String(data);
 }
 
+// Helper to trim leading and trailing spaces from a String
+String trimString(const String& str) {
+  int start = 0;
+  int end = str.length() - 1;
+  while (start <= end && str[start] == ' ') start++;
+  while (end >= start && str[end] == ' ') end--;
+  return str.substring(start, end + 1);
+}
+
+// Helper to remove all spaces from a String
+String removeAllSpaces(const String& str) {
+  String out = "";
+  for (int i = 0; i < str.length(); ++i) {
+    if (str[i] != ' ') out += str[i];
+  }
+  return out;
+}
+
 void saveWiFiToEEPROM() {
-  currentSSID = typedSSID;
-  currentPassword = typedPassword;
+  // Trim spaces before saving
+  currentSSID = trimString(typedSSID);
+  currentPassword = trimString(typedPassword);
+  typedSSID = currentSSID;
+  typedPassword = currentPassword;
   writeStringToEEPROM(SSID_ADDR, currentSSID);
   writeStringToEEPROM(PASS_ADDR, currentPassword);
   EEPROM.commit();
@@ -229,10 +250,10 @@ void enterEditScreen(int field) {
 
 void saveEditBuffer() {
   switch (editField) {
-    case 0: typedSSID = editBuffer; saveWiFiToEEPROM(); break;
-    case 1: typedPassword = editBuffer; saveWiFiToEEPROM(); break;
-    case 2: minBlinkDuration = editBuffer.toInt(); saveConfigToEEPROM(); break;
-    case 3: consecutiveGap = editBuffer.toInt(); saveConfigToEEPROM(); break;
+    case 0: typedSSID = trimString(editBuffer); saveWiFiToEEPROM(); break;
+    case 1: typedPassword = trimString(editBuffer); saveWiFiToEEPROM(); break;
+    case 2: minBlinkDuration = removeAllSpaces(editBuffer).toInt(); saveConfigToEEPROM(); break;
+    case 3: consecutiveGap = removeAllSpaces(editBuffer).toInt(); saveConfigToEEPROM(); break;
   }
   inEditScreen = false;
   if (editField == 0 || editField == 1) { uiState = 1; drawWiFiMenu(); }
@@ -240,6 +261,24 @@ void saveEditBuffer() {
 }
 
 // --- New Main Menu Drawing ---
+// Placeholder for post-save/cancel interface
+void drawPlaceholderPage() {
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_YELLOW);
+  tft.setTextSize(2);
+  tft.setCursor(40, 200);
+  tft.print("Placeholder Page");
+  tft.setTextColor(TFT_WHITE);
+  tft.setCursor(40, 240);
+  tft.print("(Redirected after Save/Cancel)");
+}
+
+// For restoring previous settings on cancel
+String prevTypedSSID = "";
+String prevTypedPassword = "";
+unsigned long prevMinBlinkDuration = 400;
+unsigned long prevConsecutiveGap = 2000;
+
 void drawMainMenu() {
   tft.fillScreen(TFT_BLACK);
   tft.setTextSize(2);
@@ -262,6 +301,22 @@ void drawMainMenu() {
   tft.setTextColor(TFT_CYAN);
   tft.setCursor(20, 2*segmentHeight+50);
   tft.print(userId);
+
+  // Save and Cancel buttons at the bottom
+  int btnY = 420;
+  int btnW = 120;
+  int btnH = 40;
+  // Save button
+  tft.setTextColor(TFT_WHITE);
+  tft.fillRect(30, btnY, btnW, btnH, TFT_DARKGREY);
+  tft.drawRect(30, btnY, btnW, btnH, TFT_WHITE);
+  tft.setCursor(60, btnY+12);
+  tft.print("Save");
+  // Cancel button
+  tft.fillRect(170, btnY, btnW, btnH, TFT_DARKGREY);
+  tft.drawRect(170, btnY, btnW, btnH, TFT_WHITE);
+  tft.setCursor(200, btnY+12);
+  tft.print("Cancel");
 }
 
 // --- WiFi Menu Drawing ---
@@ -291,8 +346,8 @@ void drawWiFiMenu() {
   tft.print(typedPassword);
   // Back button
   tft.setTextColor(TFT_YELLOW);
-  tft.drawRect(10, 420, 100, 40, TFT_WHITE);
-  tft.setCursor(30, 430);
+  tft.drawRect(10, 370, 100, 40, TFT_WHITE);
+  tft.setCursor(30, 380);
   tft.print("Back");
 }
 
@@ -359,8 +414,8 @@ void drawBlinkMenu() {
   // Back button
   tft.setTextColor(TFT_YELLOW);
   tft.setTextSize(2);
-  tft.drawRect(10, 420, 100, 40, TFT_WHITE);
-  tft.setCursor(30, 430);
+  tft.drawRect(10, 370, 100, 40, TFT_WHITE);
+  tft.setCursor(30, 380);
   tft.print("Back");
 }
 
@@ -523,6 +578,40 @@ void handleTouch() {
         return;
       }
       // User ID: do nothing
+
+      // Save button
+      if (tx >= 30 && tx <= 150 && ty >= 420 && ty <= 460) {
+        // Save: visual feedback (green)
+        tft.fillRect(30, 420, 120, 40, TFT_GREEN);
+        tft.drawRect(30, 420, 120, 40, TFT_WHITE);
+        tft.setTextColor(TFT_WHITE);
+        tft.setCursor(60, 432);
+        tft.print("Save");
+        delay(120);
+        drawPlaceholderPage();
+        uiState = 4;
+        return;
+      }
+      // Cancel button
+      if (tx >= 170 && tx <= 290 && ty >= 420 && ty <= 460) {
+        // Cancel: visual feedback (red)
+        tft.fillRect(170, 420, 120, 40, TFT_RED);
+        tft.drawRect(170, 420, 120, 40, TFT_WHITE);
+        tft.setTextColor(TFT_WHITE);
+        tft.setCursor(200, 432);
+        tft.print("Cancel");
+        delay(120);
+        // Restore previous settings and redirect
+        typedSSID = prevTypedSSID;
+        typedPassword = prevTypedPassword;
+        minBlinkDuration = prevMinBlinkDuration;
+        consecutiveGap = prevConsecutiveGap;
+        saveWiFiToEEPROM();
+        saveConfigToEEPROM();
+        drawPlaceholderPage();
+        uiState = 4;
+        return;
+      }
     }
     return;
   }
@@ -541,7 +630,7 @@ void handleTouch() {
         return;
       }
       // Back button
-      if (tx >= 10 && tx <= 110 && ty >= 420 && ty <= 460) {
+      if (tx >= 10 && tx <= 110 && ty >= 370 && ty <= 410) {
         uiState = 0;
         drawMainMenu();
         return;
@@ -630,7 +719,7 @@ void handleTouch() {
         return;
       }
       // Back button
-      if (tx >= 10 && tx <= 110 && ty >= 420 && ty <= 460) {
+      if (tx >= 10 && tx <= 110 && ty >= 370 && ty <= 410) {
         uiState = 0;
         drawMainMenu();
         return;
@@ -777,6 +866,13 @@ void setup() {
   loadConfigFromEEPROM();
   typedSSID = currentSSID;
   typedPassword = currentPassword;
+
+  // Store previous settings for cancel
+  prevTypedSSID = typedSSID;
+  prevTypedPassword = typedPassword;
+  prevMinBlinkDuration = minBlinkDuration;
+  prevConsecutiveGap = consecutiveGap;
+
   drawMainMenu();
 }
 
