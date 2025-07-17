@@ -110,6 +110,11 @@ bool minimalEditMode = false;
 // Add a variable to store the previous WiFi name before editing
 String prevSSIDBeforeEdit = "";
 
+// Add a flag and buffer for WiFi Password T9 edit mode
+bool wifiPassT9EditMode = false;
+String editPassBuffer = "";
+String prevTypedPasswordBeforeEdit = "";
+
 // Draw minimal edit screen: heading, message box, T9 keyboard only
 void drawMinimalEditScreen() {
     tft.fillScreen(TFT_BLACK);
@@ -410,6 +415,19 @@ void drawWifiNameT9EditScreen() {
 // Add a flag for WiFi Name T9 edit mode
 bool wifiNameT9EditMode = false;
 
+// Draw WiFi Password T9 edit interface
+void drawWifiPassT9EditScreen() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_YELLOW);
+    tft.setTextSize(2);
+    tft.setCursor(15, 10);
+    tft.print("WIFI-PASSWORD");
+    drawMessageBar(editPassBuffer);
+    clearPopupBar();
+    if (popupActiveEdit) drawPopupBar();
+    for (int i = 0; i < 12; i++) drawT9Cell(i, false);
+}
+
 void handleTouch() {
   uint16_t tx, ty;
   // WiFi Name T9 edit mode: handle first so it takes priority
@@ -603,6 +621,117 @@ void handleTouch() {
     }
     return;
   }
+  // WiFi Password T9 edit mode: handle first so it takes priority
+  if (wifiPassT9EditMode) {
+    if (tft.getTouch(&tx, &ty)) {
+      // T9 grid area
+      int t9Y = 160;
+      int prevCell = editSelectedT9Cell;
+      for (int i = 0; i < 12; i++) {
+        int col = i % 3;
+        int row = i / 3;
+        int x = 15 + col * (90 + 10);
+        int y = t9Y + row * (60 + 10);
+        if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
+          // Handle special cells
+          if (i == 9) { // SAVE
+            prevTypedPassword = typedPassword;
+            typedPassword = editPassBuffer;
+            wifiPassT9EditMode = false;
+            editSelectedT9Cell = -1;
+            popupActiveEdit = false;
+            drawWiFiMenu();
+            return;
+          } else if (i == 10) { // 0 _<
+            // Show popup bar for 0 _ <
+            if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false);
+            editSelectedT9Cell = i;
+            drawT9Cell(i, true);
+            setupPopupEdit(i); // This will set up "0", "_", "<"
+            if (popupCountEdit > 0) {
+              popupActiveEdit = true;
+              popupIndexEdit = -1;
+              popupStartTimeEdit = millis();
+              drawPopupBar();
+            }
+            return;
+          } else if (i == 11) { // CLEAR
+            editPassBuffer = "";
+            drawMessageBar(editPassBuffer);
+            return;
+          } else {
+            // Normal T9 cell: highlight and show popup
+            if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false);
+            editSelectedT9Cell = i;
+            drawT9Cell(i, true);
+            setupPopupEdit(i);
+            if (popupCountEdit > 0) {
+              popupActiveEdit = true;
+              popupIndexEdit = -1;
+              popupStartTimeEdit = millis();
+              drawPopupBar();
+            }
+            return;
+          }
+        }
+      }
+      // Popup bar area (fixed position)
+      int popupBarYFixed = 110;
+      int popupBarHeightFixed = 40;
+      int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
+      int popupX = (320 - totalWidth) / 2;
+      for (int i = 0; i < popupCountEdit; i++) {
+        int px = popupX + i * (popupWidthEdit + popupSpacingEdit);
+        if (tx >= px && tx <= px+popupWidthEdit && ty >= popupBarYFixed && ty <= popupBarYFixed+popupBarHeightFixed) {
+          String sel = lastPopupCharsEdit[i];
+          // Highlight popup button green
+          tft.fillRect(px, popupBarYFixed, popupWidthEdit, popupBarHeightFixed, TFT_BLACK);
+          for (int t = 0; t < 3; ++t) tft.drawRect(px + t, popupBarYFixed + t, popupWidthEdit - 2 * t, popupBarHeightFixed - 2 * t, TFT_GREEN);
+          tft.setTextColor(TFT_WHITE, TFT_BLACK);
+          tft.setTextSize(2);
+          int tw = tft.textWidth(sel);
+          int tx2 = px + (popupWidthEdit - tw) / 2;
+          int ty2 = popupBarYFixed + (popupBarHeightFixed / 2) - 6;
+          tft.setCursor(tx2, ty2);
+          tft.print(sel);
+          delay(120);
+          if (editPassBuffer.length() < 24 || sel == "<") {
+            if (sel == "<") {
+              if (editPassBuffer.length()) editPassBuffer.remove(editPassBuffer.length()-1);
+            } else if (sel == "_") {
+              editPassBuffer += " ";
+            } else if (sel == "0") {
+              editPassBuffer += "0";
+            } else {
+              editPassBuffer += sel;
+            }
+          }
+          popupActiveEdit = false;
+          if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
+          editSelectedT9Cell = -1;
+          clearPopupBar();
+          drawMessageBar(editPassBuffer);
+          return;
+        }
+      }
+      // If touch outside popup, close popup and deselect cell
+      if (popupActiveEdit) {
+        popupActiveEdit = false;
+        if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
+        editSelectedT9Cell = -1;
+        clearPopupBar();
+        return;
+      }
+    }
+    // --- Popup timeout logic ---
+    if (popupActiveEdit && (millis() - popupStartTimeEdit > popupTimeoutEdit)) {
+      popupActiveEdit = false;
+      if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
+      editSelectedT9Cell = -1;
+      clearPopupBar();
+    }
+    return;
+  }
   // Main menu touch handling (settingsUiState == 0)
   if (settingsUiState == 0) {
     if (tft.getTouch(&tx, &ty)) {
@@ -676,9 +805,12 @@ void handleTouch() {
       if (tx >= 15 && tx <= 305 && ty >= 170 && ty <= 210) {
         editField = 1; // Password
         editHeading = getEditHeading(editField);
-        editBuffer = typedPassword;
-        settingsUiState = 3;
-        drawEditScreen();
+        editPassBuffer = typedPassword;
+        prevTypedPasswordBeforeEdit = typedPassword;
+        wifiPassT9EditMode = true;
+        editSelectedT9Cell = -1;
+        popupActiveEdit = false;
+        drawWifiPassT9EditScreen();
         return;
       }
       // Back button
@@ -988,8 +1120,13 @@ void setupPopupEdit(int index) {
         popupWidthEdit = 50;
     } else {
         String label = labels[index];
-        for (int i = 0; i < label.length(); i++) {
-            if (label[i] != ' ' && !(label[i] >= '0' && label[i] <= '9')) lastPopupCharsEdit[popupCountEdit++] = String(label[i]);
+        // Always include the number as the first popup button
+        if (label.length() > 0 && label[0] >= '0' && label[0] <= '9') {
+            lastPopupCharsEdit[popupCountEdit++] = String(label[0]);
+        }
+        // Add all letters (skip spaces and the number at the start)
+        for (int i = 1; i < label.length(); i++) {
+            if (label[i] != ' ') lastPopupCharsEdit[popupCountEdit++] = String(label[i]);
         }
         popupWidthEdit = 50;
     }
