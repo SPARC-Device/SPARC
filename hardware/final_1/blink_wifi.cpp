@@ -6,8 +6,8 @@ static const int IR_SENSOR_PIN = 36;
 static const int BLINK_LED_PIN = 25; // Changed from 19 to 25
 static const int EMERGENCY_LED_PIN = 27; // Changed from 2 to 27
 static const int BUZZER_PIN = 26;
-static const int NAVIGATION_LED_PIN = 14; // Added navigation LED
-static const int EMERGENCY_BUTTON_PIN = 22; // Emergency reset button
+// static const int NAVIGATION_LED_PIN = 14; // Removed navigation LED
+static const int EMERGENCY_BUTTON_PIN = 12; // Emergency reset button moved to 14 from 22
 
 // Configurable blink detection
 static unsigned long minBlinkDuration = 400; // Default is 400 ms
@@ -40,12 +40,12 @@ void blinkWifiSetup() {
   pinMode(BLINK_LED_PIN, OUTPUT);
   pinMode(EMERGENCY_LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(NAVIGATION_LED_PIN, OUTPUT); // Navigation LED
+  // pinMode(NAVIGATION_LED_PIN, OUTPUT); // Removed navigation LED
   pinMode(EMERGENCY_BUTTON_PIN, INPUT_PULLUP); // Emergency reset button
   digitalWrite(BLINK_LED_PIN, LOW);
   digitalWrite(EMERGENCY_LED_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
-  digitalWrite(NAVIGATION_LED_PIN, LOW); // Ensure navigation LED is off at start
+  // digitalWrite(NAVIGATION_LED_PIN, LOW); // Removed navigation LED
 }
 
 void blinkWifiLoop() {
