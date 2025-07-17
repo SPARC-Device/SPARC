@@ -148,7 +148,7 @@ String getEditHeading(int field) {
     case 0: return "WIFI-NAME";
     case 1: return "WIFI-PASSWORD";
     case 2: return "Valid Blink";
-    case 3: return "Consecutive Gap";
+    case 3: return "Consecutive Blink Gap";
     default: return "";
   }
 }
