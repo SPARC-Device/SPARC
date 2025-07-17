@@ -38,7 +38,7 @@ static void clearPopupText();
 
 // --- Setup ---
 void gui3Setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
     tft.init();
     tft.setRotation(2);
     uint16_t calData[5] = { 471, 2859, 366, 3388, 2 };

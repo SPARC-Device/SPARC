@@ -9,8 +9,8 @@ static const int BUZZER_PIN = 26;
 static const int NAVIGATION_LED_PIN = 14; // Added navigation LED
 
 // Configurable blink detection
-static unsigned long minBlinkDuration = 400;
-static unsigned long blinkInterval = 2000;
+static unsigned long minBlinkDuration = 400; // Default is 400 ms
+static unsigned long blinkInterval = 1500;    // Default is 800 ms
 static const unsigned long DEBOUNCE_DELAY = 50;
 static const unsigned long EMERGENCY_TIMEOUT = 3000;
 
@@ -21,6 +21,7 @@ static unsigned long eyeCloseTime = 0;
 static unsigned long lastDebounceTime = 0;
 static int consecutiveBlinks = 0;
 static unsigned long lastBlinkTime = 0;
+static unsigned long lastBlinkEndTime = 0; // For correct blink gap calculation
 static bool emergencyMode = false;
 static unsigned long emergencyStartTime = 0;
 
@@ -61,12 +62,25 @@ void blinkWifiLoop() {
         unsigned long blinkDuration = millis() - eyeCloseTime;
         digitalWrite(BLINK_LED_PIN, LOW); // Blink LED OFF
         if (blinkDuration >= minBlinkDuration) {
+          unsigned long blinkGap = 0;
+          if (lastBlinkEndTime != 0) {
+            blinkGap = millis() - lastBlinkEndTime;
+          }
           if (millis() - lastBlinkTime < blinkInterval) {
             consecutiveBlinks++;
           } else {
             consecutiveBlinks = 1;  // Reset count if too much time passed
           }
           lastBlinkTime = millis();
+          lastBlinkEndTime = millis(); // Update for next gap calculation
+          // Debug print
+          Serial.print("Blink #");
+          Serial.print(consecutiveBlinks);
+          Serial.print(", Duration: ");
+          Serial.print(blinkDuration);
+          Serial.print(" ms, Gap: ");
+          Serial.print(blinkGap);
+          Serial.println(" ms");
           // Set blink event flags for GUI
           if (consecutiveBlinks == 1) singleBlinkDetected = true;
           if (consecutiveBlinks == 2) doubleBlinkDetected = true;
