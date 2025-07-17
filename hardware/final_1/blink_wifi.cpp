@@ -12,7 +12,7 @@ static const int NAVIGATION_LED_PIN = 14; // Added navigation LED
 static unsigned long minBlinkDuration = 400; // Default is 400 ms
 static unsigned long blinkInterval = 1500;    // Default is 800 ms
 static const unsigned long DEBOUNCE_DELAY = 50;
-static const unsigned long EMERGENCY_TIMEOUT = 3000;
+static const unsigned long EMERGENCY_TIMEOUT = 7000;
 
 // State variables
 static bool currentEyeState = true;
@@ -28,6 +28,10 @@ static unsigned long emergencyStartTime = 0;
 // Blink event flags for GUI
 static bool singleBlinkDetected = false;
 static bool doubleBlinkDetected = false;
+static bool quadBlinkDetected = false; // For 4 blinks (emergency)
+
+// For deferred blink event processing
+static unsigned long lastBlinkEventTime = 0;
 
 void blinkWifiSetup() {
   pinMode(IR_SENSOR_PIN, INPUT);
@@ -73,6 +77,7 @@ void blinkWifiLoop() {
           }
           lastBlinkTime = millis();
           lastBlinkEndTime = millis(); // Update for next gap calculation
+          lastBlinkEventTime = millis(); // Update for deferred event
           // Debug print
           Serial.print("Blink #");
           Serial.print(consecutiveBlinks);
@@ -81,20 +86,27 @@ void blinkWifiLoop() {
           Serial.print(" ms, Gap: ");
           Serial.print(blinkGap);
           Serial.println(" ms");
-          // Set blink event flags for GUI
-          if (consecutiveBlinks == 1) singleBlinkDetected = true;
-          if (consecutiveBlinks == 2) doubleBlinkDetected = true;
-          // Emergency trigger
-          if (consecutiveBlinks >= 4 && !emergencyMode) {
-            emergencyMode = true;
-            emergencyStartTime = millis();
-          }
         }
       }
       currentEyeState = eyeOpen;
     }
   }
   lastSensorReading = sensorReading;
+
+  // Deferred blink event processing
+  if (consecutiveBlinks > 0 && (millis() - lastBlinkEventTime > blinkInterval)) {
+    if (consecutiveBlinks == 1) {
+      singleBlinkDetected = true;
+    } else if (consecutiveBlinks == 2) {
+      doubleBlinkDetected = true;
+    } else if (consecutiveBlinks == 4 && !emergencyMode) {
+      quadBlinkDetected = true;
+      emergencyMode = true;
+      emergencyStartTime = millis();
+    }
+    // Reset blink count after event
+    consecutiveBlinks = 0;
+  }
 
   // Emergency siren logic
   if (emergencyMode) {
@@ -107,7 +119,7 @@ void blinkWifiLoop() {
       digitalWrite(EMERGENCY_LED_PIN, LOW);
       digitalWrite(BUZZER_PIN, LOW);
     }
-    // Reset emergency & blink count if no activity for 3s
+    // Reset emergency & blink count if no activity for 7s
     if (millis() - lastBlinkTime > EMERGENCY_TIMEOUT) {
       consecutiveBlinks = 0;
       emergencyMode = false;
@@ -117,7 +129,7 @@ void blinkWifiLoop() {
   } else {
     digitalWrite(EMERGENCY_LED_PIN, LOW);
     digitalWrite(BUZZER_PIN, LOW);
-    // Reset blink count if no activity for 3s
+    // Reset blink count if no activity for 7s
     if (millis() - lastBlinkTime > EMERGENCY_TIMEOUT) {
       consecutiveBlinks = 0;
     }
@@ -135,6 +147,15 @@ bool blinkWifiCheckSingleBlink() {
 bool blinkWifiCheckDoubleBlink() {
   if (doubleBlinkDetected) {
     doubleBlinkDetected = false;
+    return true;
+  }
+  return false;
+}
+
+// Optionally, for emergency/quad blink
+bool blinkWifiCheckQuadBlink() {
+  if (quadBlinkDetected) {
+    quadBlinkDetected = false;
     return true;
   }
   return false;

@@ -11,6 +11,9 @@ void loop() {
   gui3Loop();
 
   // --- Blink navigation integration ---
-  if (blinkWifiCheckSingleBlink()) gui3OnSingleBlink();
-  if (blinkWifiCheckDoubleBlink()) gui3OnDoubleBlink();
+  if (blinkWifiCheckDoubleBlink()) {
+    gui3OnDoubleBlink();
+  } else if (blinkWifiCheckSingleBlink()) {
+    gui3OnSingleBlink();
+  }
 }
