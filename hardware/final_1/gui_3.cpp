@@ -94,7 +94,9 @@ void gui3OnDoubleBlink() {
             typedMessage += " ";
         } else if (sel == "toilet" || sel == "food" || sel == "doctor") {
             typedMessage += sel;
-        } else {
+        }  else if (sel=="."){ 
+            typedMessage = "";
+          } else {
             typedMessage += sel;
         }
         drawMessageBox();
