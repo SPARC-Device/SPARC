@@ -3,6 +3,7 @@
 #include "emoji_arrays3.h"
 #include <TFT_eSPI.h>
 
+extern void openSettingsInterface();
 // --- Static variables for T9 state and UI ---
 static TFT_eSPI tft = TFT_eSPI();
 static String typedMessage = "";
@@ -70,6 +71,20 @@ void gui3Loop() {
             tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_NAVY);
         }
         lastCursorBlink = millis();
+    }
+    // --- Touch handling for settings cell (index 11) ---
+    uint16_t x, y;
+    if (tft.getTouch(&x, &y)) {
+        // Settings cell (index 11) position
+        int col = 2;
+        int row = 3;
+        int cellX = 15 + col * (90 + 10);
+        int cellY = 180 + row * (60 + 10);
+        int cellW = 90;
+        int cellH = 60;
+        if (x >= cellX && x < cellX + cellW && y >= cellY && y < cellY + cellH) {
+            openSettingsInterface();
+        }
     }
 }
 
