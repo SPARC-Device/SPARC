@@ -5,6 +5,10 @@
 // --- Static variables for T9 state and UI ---
 static TFT_eSPI tft = TFT_eSPI();
 static String typedMessage = "";
+static bool cursorVisible = true;
+static unsigned long lastCursorBlink = 0;
+static const unsigned long cursorBlinkInterval = 500; // ms
+static int cursorX = 0; // Global cursor X position
 
 // T9 layout and state
 static const char* labels[12] = {
@@ -15,6 +19,7 @@ static const char* labels[12] = {
 };
 static int selectedCell = 0; // 0-11
 static bool popupActive = false;
+static bool popupSelecting = false; // New: true when navigating popup
 static int popupIndex = 0; // index in popup
 static int popupCount = 0;
 static String lastPopupChars[6];
@@ -24,7 +29,7 @@ static int popupSpacing = 5;
 static const int popupBarY = 130;
 static const int popupBarHeight = 30;
 static unsigned long popupStartTime = 0;
-static const unsigned long popupTimeout = 3000; // 3 seconds
+static const unsigned long popupTimeout = 5000; // 5 seconds
 
 // --- Forward declarations for static helper functions ---
 static void drawMessageBox();
@@ -52,22 +57,35 @@ void gui3Setup() {
 // --- Main loop: handles periodic tasks (should be called in Arduino loop) ---
 void gui3Loop() {
     gui3CheckPopupTimeout();
+    // Handle cursor blinking
+    if (millis() - lastCursorBlink > cursorBlinkInterval) {
+        cursorVisible = !cursorVisible;
+        int cursorY = 25;
+        int cursorHeight = 24;
+        if (cursorVisible) {
+            tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
+        } else {
+            // Erase the cursor by overdrawing with background color
+            tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_NAVY);
+        }
+        lastCursorBlink = millis();
+    }
 }
 
 // --- Blink event: single blink ---
 void gui3OnSingleBlink() {
-    if (!popupActive) {
-        // Move to next cell (cyclic)
-        int prevCell = selectedCell;
-        selectedCell = (selectedCell + 1) % 12;
-        drawButton(prevCell, false); // revert previous to dark grey
-        highlightCell(selectedCell); // highlight new cell
-    } else {
+    if (popupActive && popupSelecting) {
         // Move to next popup button (cyclic)
         int prevPopup = popupIndex;
         popupIndex = (popupIndex + 1) % popupCount;
         drawPopup(); // redraw all, only one is navy blue
         popupStartTime = millis(); // reset timer
+    } else if (!popupActive) {
+        // Move to next cell (cyclic)
+        int prevCell = selectedCell;
+        selectedCell = (selectedCell + 1) % 12;
+        drawButton(prevCell, false); // revert previous to dark grey
+        highlightCell(selectedCell); // highlight new cell
     }
 }
 
@@ -78,11 +96,12 @@ void gui3OnDoubleBlink() {
         drawButton(selectedCell, true); // yellow highlight
         setupPopup(selectedCell);
         popupActive = true;
+        popupSelecting = true; // Now in popup selection mode
         popupIndex = 0;
         drawPopup();
         popupStartTime = millis();
-    } else {
-        // Select current popup button, turn it green, add to message, clear popup
+    } else if (popupActive && popupSelecting) {
+        // Double blink in popup: select current popup button, add to message bar, clear popup
         drawPopupSelection(popupIndex); // green highlight
         delay(150); // brief visual feedback
         String sel = lastPopupChars[popupIndex];
@@ -92,7 +111,9 @@ void gui3OnDoubleBlink() {
             typedMessage += " ";
         } else if (sel == "toilet" || sel == "food" || sel == "doctor") {
             typedMessage += sel;
-        } else {
+        }  else if (sel=="."){ 
+            typedMessage = "";
+          } else {
             typedMessage += sel;
         }
         drawMessageBox();
@@ -100,16 +121,18 @@ void gui3OnDoubleBlink() {
         drawButton(selectedCell, false); // revert cell from yellow to navy blue
         highlightCell(selectedCell);
         popupActive = false;
+        popupSelecting = false;
     }
 }
 
 // --- Popup timeout handler (should be called periodically) ---
 void gui3CheckPopupTimeout() {
-    if (popupActive && (millis() - popupStartTime >= popupTimeout)) {
+    if (popupActive && popupSelecting && (millis() - popupStartTime >= popupTimeout)) {
         clearPopupText();
         drawButton(selectedCell, false); // revert cell from yellow to navy blue
         highlightCell(selectedCell);
         popupActive = false;
+        popupSelecting = false;
     }
 }
 
@@ -121,6 +144,12 @@ static void drawMessageBox() {
     tft.setTextSize(3);
     tft.setCursor(15, 25);
     tft.print(typedMessage);
+    // Draw cursor (always on when message box is redrawn)
+    int textWidth = tft.textWidth(typedMessage);
+    cursorX = 15 + textWidth + 2; // Update global cursorX with offset
+    int cursorY = 25;
+    int cursorHeight = 24;
+    tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
 }
 
 static void drawT9Grid() {
