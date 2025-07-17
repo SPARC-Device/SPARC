@@ -180,14 +180,19 @@ static void drawButton(int index, bool highlightYellow) {
     int y = 180 + row * (60 + 10);
     uint16_t fill = highlightYellow ? TFT_YELLOW : TFT_DARKGREY;
     uint16_t text = highlightYellow ? TFT_BLACK : TFT_WHITE;
+    if(index==11 || index==9){
+        fill=TFT_BLACK;
+    }
     tft.fillRect(x, y, 90, 60, fill);
     tft.drawRect(x, y, 90, 60, TFT_WHITE);
     if (index == 9) {
+         // black background for emoji
         tft.pushImage(x + 5, y + 25, 24, 24, emoji_toilet);
         tft.pushImage(x + 33, y + 25, 24, 24, emoji_food);
         tft.pushImage(x + 61, y + 25, 24, 24, emoji_doctor);
     } 
     else if(index == 11){
+          // black background for emoji
         tft.pushImage(x + 20, y + 7, 48, 48, emoji_settings);
          
     }else {
