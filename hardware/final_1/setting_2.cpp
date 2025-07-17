@@ -5,9 +5,11 @@
 
 // --- Forward declarations for T9 helpers ---
 void drawMessageBar(const String& msg);
-void drawT9Cell(int index, bool highlightYellow);
+void drawT9Cell(int index, bool highlightYellow, bool blinkMode);
 void drawPopupBar();
 void clearPopupBar();
+void drawValidBlinkT9EditScreen();
+void drawConsecutiveGapT9EditScreen();
 
 // --- Popup state for T9 keyboard in settings edit screen (move to top for visibility) ---
 int popupCountEdit = 0;
@@ -114,6 +116,24 @@ String prevSSIDBeforeEdit = "";
 bool wifiPassT9EditMode = false;
 String editPassBuffer = "";
 String prevTypedPasswordBeforeEdit = "";
+
+// Add a flag and buffer for Valid Blink T9 edit mode
+bool validBlinkT9EditMode = false;
+String editValidBlinkBuffer = "";
+String prevValidBlinkValue = "";
+
+// Add a flag and buffer for Consecutive Gap T9 edit mode
+bool consecutiveGapT9EditMode = false;
+String editConsecutiveGapBuffer = "";
+String prevConsecutiveGapValue = "";
+
+// --- Add new labels for blink settings T9 keyboard ---
+const char* blinkLabels[12] = {
+  "1", "2", "3",
+  "4", "5", "6",
+  "7", "8", "9",
+  "SAVE", "0_<", "CLEAR"
+};
 
 // Draw minimal edit screen: heading, message box, T9 keyboard only
 void drawMinimalEditScreen() {
@@ -732,6 +752,221 @@ void handleTouch() {
     }
     return;
   }
+  // In handleTouch, update Valid Blink and Consecutive Gap T9 edit mode logic to only append digits from popups, ignore all other popup selections
+  if (validBlinkT9EditMode) {
+    if (tft.getTouch(&tx, &ty)) {
+      int t9Y = 160;
+      int prevCell = editSelectedT9Cell;
+      for (int i = 0; i < 12; i++) {
+        int col = i % 3;
+        int row = i / 3;
+        int x = 15 + col * (90 + 10);
+        int y = t9Y + row * (60 + 10);
+        if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
+          if (i == 9) { // SAVE
+            prevValidBlinkValue = String(minBlinkDuration);
+            String digits = editValidBlinkBuffer;
+            int firstNonZero = 0;
+            while (firstNonZero < digits.length() && digits[firstNonZero] == '0') firstNonZero++;
+            digits = digits.substring(firstNonZero);
+            if (digits.length() == 0) minBlinkDuration = 0;
+            else minBlinkDuration = digits.substring(0, 10).toInt();
+            saveConfigToEEPROM();
+            validBlinkT9EditMode = false;
+            editSelectedT9Cell = -1;
+            popupActiveEdit = false;
+            drawBlinkMenu();
+            return;
+          } else if (i == 10) { // 0_<
+            if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false, true);
+            editSelectedT9Cell = i;
+            drawT9Cell(i, true, true);
+            // Only show popup for 0, _, <
+            popupCountEdit = 0;
+            lastPopupCharsEdit[popupCountEdit++] = "0";
+            lastPopupCharsEdit[popupCountEdit++] = "_";
+            lastPopupCharsEdit[popupCountEdit++] = "<";
+            popupWidthEdit = 50;
+            int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
+            int popupX = (320 - totalWidth) / 2;
+            for (int j = 0; j < popupCountEdit; j++) {
+                popupXPositionsEdit[j] = popupX + j * (popupWidthEdit + popupSpacingEdit);
+            }
+            popupActiveEdit = true;
+            popupIndexEdit = -1;
+            popupStartTimeEdit = millis();
+            drawPopupBar();
+            return;
+          } else if (i == 11) { // CLEAR
+            editValidBlinkBuffer = "0";
+            drawMessageBar(editValidBlinkBuffer);
+            return;
+          } else if (i >= 0 && i <= 8) { // 1-9
+            if (editValidBlinkBuffer.length() < 10) {
+                editValidBlinkBuffer += String(i+1);
+                drawMessageBar(editValidBlinkBuffer);
+            }
+            return;
+          }
+        }
+      }
+      // Popup bar area
+      int popupBarYFixed = 110;
+      int popupBarHeightFixed = 40;
+      int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
+      int popupX = (320 - totalWidth) / 2;
+      for (int i = 0; i < popupCountEdit; i++) {
+        int px = popupX + i * (popupWidthEdit + popupSpacingEdit);
+        if (tx >= px && tx <= px+popupWidthEdit && ty >= popupBarYFixed && ty <= popupBarYFixed+popupBarHeightFixed) {
+          String sel = lastPopupCharsEdit[i];
+          tft.fillRect(px, popupBarYFixed, popupWidthEdit, popupBarHeightFixed, TFT_BLACK);
+          for (int t = 0; t < 3; ++t) tft.drawRect(px + t, popupBarYFixed + t, popupWidthEdit - 2 * t, popupBarHeightFixed - 2 * t, TFT_GREEN);
+          tft.setTextColor(TFT_WHITE, TFT_BLACK);
+          tft.setTextSize(2);
+          int tw = tft.textWidth(sel);
+          int tx2 = px + (popupWidthEdit - tw) / 2;
+          int ty2 = popupBarYFixed + (popupBarHeightFixed / 2) - 6;
+          tft.setCursor(tx2, ty2);
+          tft.print(sel);
+          delay(120);
+          if (sel == "<") {
+            if (editValidBlinkBuffer.length()) editValidBlinkBuffer.remove(editValidBlinkBuffer.length()-1);
+          } else if (sel == "0") {
+            if (editValidBlinkBuffer.length() < 10) editValidBlinkBuffer += "0";
+          } // ignore _ for numeric
+          popupActiveEdit = false;
+          if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
+          editSelectedT9Cell = -1;
+          clearPopupBar();
+          drawMessageBar(editValidBlinkBuffer);
+          return;
+        }
+      }
+      // If touch outside popup, close popup and deselect cell
+      if (popupActiveEdit) {
+        popupActiveEdit = false;
+        if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
+        editSelectedT9Cell = -1;
+        clearPopupBar();
+        return;
+      }
+    }
+    // --- Popup timeout logic ---
+    if (popupActiveEdit && (millis() - popupStartTimeEdit > popupTimeoutEdit)) {
+      popupActiveEdit = false;
+      if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
+      editSelectedT9Cell = -1;
+      clearPopupBar();
+    }
+    return;
+  }
+if (consecutiveGapT9EditMode) {
+    if (tft.getTouch(&tx, &ty)) {
+      int t9Y = 160;
+      int prevCell = editSelectedT9Cell;
+      for (int i = 0; i < 12; i++) {
+        int col = i % 3;
+        int row = i / 3;
+        int x = 15 + col * (90 + 10);
+        int y = t9Y + row * (60 + 10);
+        if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
+          if (i == 9) { // SAVE
+            prevConsecutiveGapValue = String(consecutiveGap);
+            String digits = editConsecutiveGapBuffer;
+            int firstNonZero = 0;
+            while (firstNonZero < digits.length() && digits[firstNonZero] == '0') firstNonZero++;
+            digits = digits.substring(firstNonZero);
+            if (digits.length() == 0) consecutiveGap = 0;
+            else consecutiveGap = digits.substring(0, 10).toInt();
+            saveConfigToEEPROM();
+            consecutiveGapT9EditMode = false;
+            editSelectedT9Cell = -1;
+            popupActiveEdit = false;
+            drawBlinkMenu();
+            return;
+          } else if (i == 10) { // 0_<
+            if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false, true);
+            editSelectedT9Cell = i;
+            drawT9Cell(i, true, true);
+            // Only show popup for 0, _, <
+            popupCountEdit = 0;
+            lastPopupCharsEdit[popupCountEdit++] = "0";
+            lastPopupCharsEdit[popupCountEdit++] = "_";
+            lastPopupCharsEdit[popupCountEdit++] = "<";
+            popupWidthEdit = 50;
+            int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
+            int popupX = (320 - totalWidth) / 2;
+            for (int j = 0; j < popupCountEdit; j++) {
+                popupXPositionsEdit[j] = popupX + j * (popupWidthEdit + popupSpacingEdit);
+            }
+            popupActiveEdit = true;
+            popupIndexEdit = -1;
+            popupStartTimeEdit = millis();
+            drawPopupBar();
+            return;
+          } else if (i == 11) { // CLEAR
+            editConsecutiveGapBuffer = "0";
+            drawMessageBar(editConsecutiveGapBuffer);
+            return;
+          } else if (i >= 0 && i <= 8) { // 1-9
+            if (editConsecutiveGapBuffer.length() < 10) {
+                editConsecutiveGapBuffer += String(i+1);
+                drawMessageBar(editConsecutiveGapBuffer);
+            }
+            return;
+          }
+        }
+      }
+      // Popup bar area
+      int popupBarYFixed = 110;
+      int popupBarHeightFixed = 40;
+      int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
+      int popupX = (320 - totalWidth) / 2;
+      for (int i = 0; i < popupCountEdit; i++) {
+        int px = popupX + i * (popupWidthEdit + popupSpacingEdit);
+        if (tx >= px && tx <= px+popupWidthEdit && ty >= popupBarYFixed && ty <= popupBarYFixed+popupBarHeightFixed) {
+          String sel = lastPopupCharsEdit[i];
+          tft.fillRect(px, popupBarYFixed, popupWidthEdit, popupBarHeightFixed, TFT_BLACK);
+          for (int t = 0; t < 3; ++t) tft.drawRect(px + t, popupBarYFixed + t, popupWidthEdit - 2 * t, popupBarHeightFixed - 2 * t, TFT_GREEN);
+          tft.setTextColor(TFT_WHITE, TFT_BLACK);
+          tft.setTextSize(2);
+          int tw = tft.textWidth(sel);
+          int tx2 = px + (popupWidthEdit - tw) / 2;
+          int ty2 = popupBarYFixed + (popupBarHeightFixed / 2) - 6;
+          tft.setCursor(tx2, ty2);
+          tft.print(sel);
+          delay(120);
+          if (sel == "<") {
+            if (editConsecutiveGapBuffer.length()) editConsecutiveGapBuffer.remove(editConsecutiveGapBuffer.length()-1);
+          } else if (sel == "0") {
+            if (editConsecutiveGapBuffer.length() < 10) editConsecutiveGapBuffer += "0";
+          } // ignore _ for numeric
+          popupActiveEdit = false;
+          if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
+          editSelectedT9Cell = -1;
+          clearPopupBar();
+          drawMessageBar(editConsecutiveGapBuffer);
+          return;
+        }
+      }
+      // If touch outside popup, close popup and deselect cell
+      if (popupActiveEdit) {
+        popupActiveEdit = false;
+        if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
+        editSelectedT9Cell = -1;
+        clearPopupBar();
+        return;
+      }
+    }
+    // --- Popup timeout logic ---
+    if (popupActiveEdit && (millis() - popupStartTimeEdit > popupTimeoutEdit)) {
+      popupActiveEdit = false;
+      if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
+      editSelectedT9Cell = -1;
+      clearPopupBar();
+    }
+    return;
+  }
   // Main menu touch handling (settingsUiState == 0)
   if (settingsUiState == 0) {
     if (tft.getTouch(&tx, &ty)) {
@@ -860,11 +1095,11 @@ void handleTouch() {
       }
       // Valid Blink bar (edit)
       if (tx >= barX && tx <= barX+barW && ty >= barY1 && ty <= barY1+barH) {
-        editField = 2; // Valid Blink
-        editHeading = getEditHeading(editField);
-        editBuffer = String(minBlinkDuration);
-        settingsUiState = 3;
-        drawEditScreen();
+        validBlinkT9EditMode = true;
+        editValidBlinkBuffer = String(minBlinkDuration);
+        editSelectedT9Cell = -1;
+        popupActiveEdit = false;
+        drawValidBlinkT9EditScreen();
         return;
       }
       // Consecutive Gap '-' button
@@ -897,11 +1132,11 @@ void handleTouch() {
       }
       // Consecutive Gap bar (edit)
       if (tx >= barX && tx <= barX+barW && ty >= barY2 && ty <= barY2+barH) {
-        editField = 3; // Consecutive Gap
-        editHeading = getEditHeading(editField);
-        editBuffer = String(consecutiveGap);
-        settingsUiState = 3;
-        drawEditScreen();
+        consecutiveGapT9EditMode = true;
+        editConsecutiveGapBuffer = String(consecutiveGap);
+        editSelectedT9Cell = -1;
+        popupActiveEdit = false;
+        drawConsecutiveGapT9EditScreen();
         return;
       }
       // Back button
@@ -1165,7 +1400,7 @@ void clearPopupTextEdit() {
 } 
 
 // Helper to draw a single T9 cell
-void drawT9Cell(int index, bool highlightYellow) {
+void drawT9Cell(int index, bool highlightYellow, bool blinkMode) {
     int col = index % 3;
     int row = index / 3;
     int x = 15 + col * (90 + 10);
@@ -1175,9 +1410,10 @@ void drawT9Cell(int index, bool highlightYellow) {
     tft.drawRect(x, y, 90, 60, TFT_WHITE);
     tft.setTextColor(TFT_WHITE);
     tft.setTextSize(2);
-    int textWidth = tft.textWidth(labels[index]);
+    const char* label = blinkMode ? blinkLabels[index] : labels[index];
+    int textWidth = tft.textWidth(label);
     tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
-    tft.print(labels[index]);
+    tft.print(label);
 }
 
 // Helper to draw the popup bar
@@ -1224,4 +1460,29 @@ void drawMessageBar(const String& msg) {
     String displayMsg = msg;
     if (displayMsg.length() > maxMsgLen) displayMsg = displayMsg.substring(displayMsg.length() - maxMsgLen);
     tft.print(displayMsg);
+} 
+
+// Draw Valid Blink T9 edit interface (no extra buttons, just like WiFi Name/Password)
+void drawValidBlinkT9EditScreen() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_YELLOW);
+    tft.setTextSize(2);
+    tft.setCursor(15, 10);
+    tft.print("Valid Blink");
+    drawMessageBar(editValidBlinkBuffer);
+    clearPopupBar();
+    if (popupActiveEdit) drawPopupBar();
+    for (int i = 0; i < 12; i++) drawT9Cell(i, false, true); // true = blink mode
+}
+// Draw Consecutive Gap T9 edit interface (no extra buttons, just like WiFi Name/Password)
+void drawConsecutiveGapT9EditScreen() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_YELLOW);
+    tft.setTextSize(2);
+    tft.setCursor(15, 10);
+    tft.print("Consecutive Gap");
+    drawMessageBar(editConsecutiveGapBuffer);
+    clearPopupBar();
+    if (popupActiveEdit) drawPopupBar();
+    for (int i = 0; i < 12; i++) drawT9Cell(i, false, true);
 } 
