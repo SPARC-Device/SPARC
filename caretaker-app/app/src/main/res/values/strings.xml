@@ -1,8 +1,0 @@
-<resources>
-    <string name="app_name">SPARC Notfiy</string>
-    <string name="add_code">Add UserID</string>
-    <string name="enter_patient_code">Enter UserID</string>
-    <string name="remove">Remove</string>
-    <string name="no_codes">No UserIDs added yet.</string>
-    <string name="default_notification_channel_id">emergency_channel</string>
-</resources>

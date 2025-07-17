@@ -1,0 +1,6 @@
+[submodule "SPARC-Notify"]
+	path = SPARC-Notify
+	url = https://github.com/FrankTheSssnake/SPARC-Notify
+[submodule "SPARC-GUI"]
+	path = SPARC-GUI
+	url = https://github.com/FrankTheSssnake/SPARC-GUI
