@@ -7,6 +7,7 @@ static const int BLINK_LED_PIN = 25; // Changed from 19 to 25
 static const int EMERGENCY_LED_PIN = 27; // Changed from 2 to 27
 static const int BUZZER_PIN = 26;
 static const int NAVIGATION_LED_PIN = 14; // Added navigation LED
+static const int EMERGENCY_BUTTON_PIN = 22; // Emergency reset button
 
 // Configurable blink detection
 static unsigned long minBlinkDuration = 400; // Default is 400 ms
@@ -40,6 +41,7 @@ void blinkWifiSetup() {
   pinMode(EMERGENCY_LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(NAVIGATION_LED_PIN, OUTPUT); // Navigation LED
+  pinMode(EMERGENCY_BUTTON_PIN, INPUT_PULLUP); // Emergency reset button
   digitalWrite(BLINK_LED_PIN, LOW);
   digitalWrite(EMERGENCY_LED_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
@@ -102,10 +104,11 @@ void blinkWifiLoop() {
       singleBlinkDetected = true;
     } else if (consecutiveBlinks == 2) {
       doubleBlinkDetected = true;
-    } else if (consecutiveBlinks == 4 && !emergencyMode) {
+    } else if (consecutiveBlinks >= 4 && !emergencyMode) {
       quadBlinkDetected = true;
       emergencyMode = true;
       emergencyStartTime = millis();
+      Serial.println("EMERGENCY MODE ACTIVATED!");
     }
     // Reset blink count after event
     consecutiveBlinks = 0;
@@ -122,21 +125,18 @@ void blinkWifiLoop() {
       digitalWrite(EMERGENCY_LED_PIN, LOW);
       digitalWrite(BUZZER_PIN, LOW);
     }
-    // Reset emergency & blink count if no activity for 7s
-    if (millis() - lastBlinkTime > EMERGENCY_TIMEOUT) {
-      consecutiveBlinks = 0;
+    // Emergency mode stays on until button is pressed
+    if (digitalRead(EMERGENCY_BUTTON_PIN) == HIGH) { // Button pressed (active low)
       emergencyMode = false;
       digitalWrite(BUZZER_PIN, LOW);
       digitalWrite(EMERGENCY_LED_PIN, LOW);
+      Serial.println("EMERGENCY MODE CLEARED!");
     }
   } else {
     digitalWrite(EMERGENCY_LED_PIN, LOW);
     digitalWrite(BUZZER_PIN, LOW);
-    // Reset blink count if no activity for 7s
-    if (millis() - lastBlinkTime > EMERGENCY_TIMEOUT) {
-      consecutiveBlinks = 0;
-    }
   }
+  // No more emergency timeout logic
 }
 
 bool blinkWifiCheckSingleBlink() {
