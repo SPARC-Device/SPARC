@@ -36,7 +36,7 @@ static const unsigned long popupTimeout = 5000; // 5 seconds
 static void drawMessageBox();
 static void drawT9Grid();
 static void highlightCell(int index);
-static void drawButton(int index, bool highlightYellow);
+static void drawButton(int index, bool highlightYellow, bool highlightGreen);
 static void setupPopup(int index);
 static void drawPopup();
 static void drawPopupSelection(int idx);
@@ -85,8 +85,8 @@ void gui3OnSingleBlink() {
         // Move to next cell (cyclic)
         int prevCell = selectedCell;
         selectedCell = (selectedCell + 1) % 12;
-        drawButton(prevCell, false); // revert previous to dark grey
-        highlightCell(selectedCell); // highlight new cell
+        drawButton(prevCell, false, false); // white border
+        highlightCell(selectedCell); // yellow border
     }
 }
 
@@ -94,7 +94,7 @@ void gui3OnSingleBlink() {
 void gui3OnDoubleBlink() {
     if (!popupActive) {
         // Select current cell, show popup, turn cell yellow
-        drawButton(selectedCell, true); // yellow highlight
+        drawButton(selectedCell, false, true); // green border
         setupPopup(selectedCell);
         popupActive = true;
         popupSelecting = true; // Now in popup selection mode
@@ -119,7 +119,7 @@ void gui3OnDoubleBlink() {
         }
         drawMessageBox();
         clearPopupText();
-        drawButton(selectedCell, false); // revert cell from yellow to navy blue
+        drawButton(selectedCell, false, false); // white border
         highlightCell(selectedCell);
         popupActive = false;
         popupSelecting = false;
@@ -130,7 +130,7 @@ void gui3OnDoubleBlink() {
 void gui3CheckPopupTimeout() {
     if (popupActive && popupSelecting && (millis() - popupStartTime >= popupTimeout)) {
         clearPopupText();
-        drawButton(selectedCell, false); // revert cell from yellow to navy blue
+        drawButton(selectedCell, false, false); // white border
         highlightCell(selectedCell);
         popupActive = false;
         popupSelecting = false;
@@ -154,7 +154,7 @@ static void drawMessageBox() {
 }
 
 static void drawT9Grid() {
-    for (int i = 0; i < 12; i++) drawButton(i, false);
+    for (int i = 0; i < 12; i++) drawButton(i, false, false);
 }
 
 static void highlightCell(int index) {
@@ -162,47 +162,51 @@ static void highlightCell(int index) {
     int row = index / 3;
     int x = 15 + col * (90 + 10);
     int y = 180 + row * (60 + 10);
-    tft.fillRect(x, y, 90, 60, TFT_NAVY);
-    tft.drawRect(x, y, 90, 60, TFT_WHITE);
-    tft.setTextColor(TFT_WHITE, TFT_NAVY);
+    tft.fillRect(x, y, 90, 60, TFT_BLACK);
+    // Draw thick yellow border for highlight
+    for (int t = 0; t < 3; ++t) tft.drawRect(x + t, y + t, 90 - 2 * t, 60 - 2 * t, TFT_YELLOW);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
     int textWidth = tft.textWidth(labels[index]);
     int textX = x + (90 - textWidth) / 2;
     int textY = y + (60 / 2) + 4;
     tft.setCursor(textX, textY);
     tft.print(labels[index]);
+    if (index == 9) {
+        tft.pushImage(x + 5, y + 25, 24, 24, emoji_toilet);
+        tft.pushImage(x + 33, y + 25, 24, 24, emoji_food);
+        tft.pushImage(x + 61, y + 25, 24, 24, emoji_doctor);
+    } else if (index == 11) {
+        tft.pushImage(x + 20, y + 7, 48, 48, emoji_settings);
+    }
 }
 
-static void drawButton(int index, bool highlightYellow) {
+static void drawButton(int index, bool highlightYellow, bool highlightGreen) {
     int col = index % 3;
     int row = index / 3;
     int x = 15 + col * (90 + 10);
     int y = 180 + row * (60 + 10);
-    uint16_t fill = highlightYellow ? TFT_YELLOW : TFT_DARKGREY;
-    uint16_t text = highlightYellow ? TFT_BLACK : TFT_WHITE;
-    if(index==11 || index==9){
-        fill=TFT_BLACK;
-    }
+    uint16_t fill = TFT_BLACK;
+    uint16_t border = TFT_WHITE;
+    int thickness = 1;
+    if (highlightGreen) { border = TFT_GREEN; thickness = 3; }
+    else if (highlightYellow) { border = TFT_YELLOW; thickness = 3; }
     tft.fillRect(x, y, 90, 60, fill);
-    tft.drawRect(x, y, 90, 60, TFT_WHITE);
+    for (int t = 0; t < thickness; ++t) tft.drawRect(x + t, y + t, 90 - 2 * t, 60 - 2 * t, border);
+    if (thickness == 1) tft.drawRect(x, y, 90, 60, border); // ensure thin border for unselected
+    tft.setTextColor(TFT_WHITE, fill);
+    tft.setTextSize(2);
+    int textWidth = tft.textWidth(labels[index]);
+    int textX = x + (90 - textWidth) / 2;
+    int textY = y + (60 / 2) + 4;
+    tft.setCursor(textX, textY);
+    tft.print(labels[index]);
     if (index == 9) {
-         // black background for emoji
         tft.pushImage(x + 5, y + 25, 24, 24, emoji_toilet);
         tft.pushImage(x + 33, y + 25, 24, 24, emoji_food);
         tft.pushImage(x + 61, y + 25, 24, 24, emoji_doctor);
-    } 
-    else if(index == 11){
-          // black background for emoji
+    } else if (index == 11) {
         tft.pushImage(x + 20, y + 7, 48, 48, emoji_settings);
-         
-    }else {
-        tft.setTextColor(text, fill);
-        tft.setTextSize(2);
-        int textWidth = tft.textWidth(labels[index]);
-        int textX = x + (90 - textWidth) / 2;
-        int textY = y + (60 / 2) + 4;
-        tft.setCursor(textX, textY);
-        tft.print(labels[index]);
     }
 }
 
@@ -235,11 +239,13 @@ static void setupPopup(int index) {
 static void drawPopup() {
     for (int i = 0; i < popupCount; i++) {
         int px = popupXPositions[i];
-        uint16_t fill = (i == popupIndex) ? TFT_NAVY : TFT_BLACK;
-        uint16_t text = (i == popupIndex) ? TFT_WHITE : TFT_WHITE;
+        uint16_t fill = TFT_BLACK;
+        uint16_t border = (i == popupIndex) ? TFT_YELLOW : TFT_WHITE;
+        int thickness = (i == popupIndex) ? 3 : 1;
         tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, fill);
-        tft.drawRect(px, popupBarY, popupWidth, popupBarHeight, TFT_WHITE);
-        tft.setTextColor(text, fill);
+        for (int t = 0; t < thickness; ++t) tft.drawRect(px + t, popupBarY + t, popupWidth - 2 * t, popupBarHeight - 2 * t, border);
+        if (thickness == 1) tft.drawRect(px, popupBarY, popupWidth, popupBarHeight, border);
+        tft.setTextColor(TFT_WHITE, fill);
         tft.setTextSize(2);
         String boxText = lastPopupChars[i];
         int tw = tft.textWidth(boxText);
@@ -252,9 +258,9 @@ static void drawPopup() {
 
 static void drawPopupSelection(int idx) {
     int px = popupXPositions[idx];
-    tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, TFT_GREEN);
-    tft.drawRect(px, popupBarY, popupWidth, popupBarHeight, TFT_WHITE);
-    tft.setTextColor(TFT_BLACK, TFT_GREEN);
+    tft.fillRect(px, popupBarY, popupWidth, popupBarHeight, TFT_BLACK);
+    for (int t = 0; t < 3; ++t) tft.drawRect(px + t, popupBarY + t, popupWidth - 2 * t, popupBarHeight - 2 * t, TFT_GREEN);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
     String sel = lastPopupChars[idx];
     int tw = tft.textWidth(sel);
