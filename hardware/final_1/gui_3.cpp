@@ -8,6 +8,7 @@ static String typedMessage = "";
 static bool cursorVisible = true;
 static unsigned long lastCursorBlink = 0;
 static const unsigned long cursorBlinkInterval = 500; // ms
+static int cursorX = 0; // Global cursor X position
 
 // T9 layout and state
 static const char* labels[12] = {
@@ -59,9 +60,6 @@ void gui3Loop() {
     // Handle cursor blinking
     if (millis() - lastCursorBlink > cursorBlinkInterval) {
         cursorVisible = !cursorVisible;
-        // Only redraw the cursor area, not the whole message box
-        int textWidth = tft.textWidth(typedMessage);
-        int cursorX = 15 + textWidth;
         int cursorY = 25;
         int cursorHeight = 24;
         if (cursorVisible) {
@@ -148,7 +146,7 @@ static void drawMessageBox() {
     tft.print(typedMessage);
     // Draw cursor (always on when message box is redrawn)
     int textWidth = tft.textWidth(typedMessage);
-    int cursorX = 15 + textWidth;
+    cursorX = 15 + textWidth + 2; // Update global cursorX with offset
     int cursorY = 25;
     int cursorHeight = 24;
     tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
