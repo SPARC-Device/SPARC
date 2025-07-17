@@ -1,5 +1,6 @@
 #include "gui_3.h"
 #include "emoji_arrays.h"
+#include "emoji_arrays3.h"
 #include <TFT_eSPI.h>
 
 // --- Static variables for T9 state and UI ---
@@ -15,7 +16,7 @@ static const char* labels[12] = {
   "1 ABC", "2 DEF", "3 GHI",
   "4 JKL", "5 MNO", "6 PQR",
   "7 STU", "8 VWX", "9 YZ.",
-  "", "0 _<-", "#"
+  "", "0 _<-", ""
 };
 static int selectedCell = 0; // 0-11
 static bool popupActive = false;
@@ -185,7 +186,11 @@ static void drawButton(int index, bool highlightYellow) {
         tft.pushImage(x + 5, y + 25, 24, 24, emoji_toilet);
         tft.pushImage(x + 33, y + 25, 24, 24, emoji_food);
         tft.pushImage(x + 61, y + 25, 24, 24, emoji_doctor);
-    } else {
+    } 
+    else if(index == 11){
+        tft.pushImage(x + 20, y + 7, 48, 48, emoji_settings);
+         
+    }else {
         tft.setTextColor(text, fill);
         tft.setTextSize(2);
         int textWidth = tft.textWidth(labels[index]);
