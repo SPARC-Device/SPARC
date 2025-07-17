@@ -15,11 +15,9 @@ TFT_eSPI tft = TFT_eSPI();
 String currentSSID = "";
 String currentPassword = "";
 unsigned long minBlinkDuration = 400;
-unsigned long consecutiveGap = 2000;
+unsigned long consecutiveGap = 1200;
 const unsigned long debounceDelay = 50;
 
-const int IR_SENSOR_PIN = A0;
-const int LED_PIN = 2;
 
 bool currentEyeState = true;
 bool lastSensorReading = HIGH;
@@ -373,16 +371,16 @@ void drawBlinkMenu() {
   tft.setCursor(barX+10, barY1+20-8);
   tft.print(String(minBlinkDuration));
   // '-' button
-  tft.fillRect(barX-40, barY1, 35, barH, TFT_DARKGREY);
+  tft.fillRect(barX-40, barY1, 35, barH, TFT_RED);
   tft.drawRect(barX-40, barY1, 35, barH, TFT_WHITE);
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(3);
   tft.setCursor(barX-30, barY1+8);
   tft.print("-");
   // '+' button
-  tft.fillRect(barX+barW+5, barY1, 35, barH, TFT_DARKGREY);
+  tft.fillRect(barX+barW+5, barY1, 35, barH, TFT_GREEN);
   tft.drawRect(barX+barW+5, barY1, 35, barH, TFT_WHITE);
-  tft.setTextColor(TFT_WHITE);
+  tft.setTextColor(TFT_BLACK);
   tft.setCursor(barX+barW+15, barY1+8);
   tft.print("+");
 
@@ -398,18 +396,35 @@ void drawBlinkMenu() {
   tft.setCursor(barX+10, barY2+20-8);
   tft.print(String(consecutiveGap));
   // '-' button
-  tft.fillRect(barX-40, barY2, 35, barH, TFT_DARKGREY);
+  tft.fillRect(barX-40, barY2, 35, barH, TFT_RED);
   tft.drawRect(barX-40, barY2, 35, barH, TFT_WHITE);
   tft.setTextColor(TFT_WHITE);
   tft.setTextSize(3);
   tft.setCursor(barX-30, barY2+8);
   tft.print("-");
   // '+' button
-  tft.fillRect(barX+barW+5, barY2, 35, barH, TFT_DARKGREY);
+  tft.fillRect(barX+barW+5, barY2, 35, barH, TFT_GREEN);
   tft.drawRect(barX+barW+5, barY2, 35, barH, TFT_WHITE);
-  tft.setTextColor(TFT_WHITE);
+  tft.setTextColor(TFT_BLACK);
   tft.setCursor(barX+barW+15, barY2+8);
   tft.print("+");
+
+  // Note section
+  int noteY = 280; // Adjust Y as needed to fit below the consecutive gap bar
+  tft.setTextColor(TFT_YELLOW);
+  
+   
+  tft.drawRect(10,noteY-20,300,100,TFT_WHITE); // border box for note 
+
+  tft.setTextSize(2);
+  tft.setCursor(35, noteY-5);
+  tft.print("Default Settings");
+
+  tft.setCursor(15, noteY + 25);
+  tft.setTextColor(TFT_WHITE);
+  tft.print("Valid Blink : 400ms");
+  tft.setCursor(15, noteY + 55);
+  tft.print("Consecutive Gap : 1200ms");
 
   // Back button
   tft.setTextColor(TFT_YELLOW);
@@ -417,6 +432,34 @@ void drawBlinkMenu() {
   tft.drawRect(10, 370, 100, 40, TFT_WHITE);
   tft.setCursor(30, 380);
   tft.print("Back");
+}
+
+void drawValidBlinkBar() {     // valid blink value display box
+  int barX = 70;
+  int barY1 = 80;
+  int barW = 180;
+  int barH = 40;
+  // Redraw the bar area
+  tft.drawRect(barX, barY1, barW, barH, TFT_WHITE);
+  tft.fillRect(barX+1, barY1+1, barW-2, barH-2, TFT_BLACK);
+  tft.setTextColor(TFT_CYAN);
+  tft.setCursor(barX+10, barY1+20-8);
+  tft.setTextSize(2);
+  tft.print(String(minBlinkDuration));
+}
+
+void drawConsecutiveGapBar() {
+  int barX = 70;
+  int barY2 = 170;
+  int barW = 180;
+  int barH = 40;
+  // Redraw the bar area
+  tft.drawRect(barX, barY2, barW, barH, TFT_WHITE);
+  tft.fillRect(barX+1, barY2+1, barW-2, barH-2, TFT_BLACK);
+  tft.setTextColor(TFT_CYAN);
+  tft.setCursor(barX+10, barY2+20-8);
+  tft.setTextSize(2);
+  tft.print(String(consecutiveGap));
 }
 
 void drawMainUI() {
@@ -658,7 +701,7 @@ void handleTouch() {
         delay(120);
         minBlinkDuration = (minBlinkDuration >= 10) ? minBlinkDuration-10 : 0;
         saveConfigToEEPROM();
-        drawBlinkMenu();
+        drawValidBlinkBar(); // Only update this bar
         return;
       }
       // Valid Blink '+' button
@@ -673,7 +716,7 @@ void handleTouch() {
         delay(120);
         minBlinkDuration += 10;
         saveConfigToEEPROM();
-        drawBlinkMenu();
+        drawValidBlinkBar(); // Only update this bar
         return;
       }
       // Valid Blink bar (edit)
@@ -694,7 +737,7 @@ void handleTouch() {
         delay(120);
         consecutiveGap = (consecutiveGap >= 10) ? consecutiveGap-10 : 0;
         saveConfigToEEPROM();
-        drawBlinkMenu();
+        drawConsecutiveGapBar(); // Only update this bar
         return;
       }
       // Consecutive Gap '+' button
@@ -709,7 +752,7 @@ void handleTouch() {
         delay(120);
         consecutiveGap += 10;
         saveConfigToEEPROM();
-        drawBlinkMenu();
+        drawConsecutiveGapBar(); // Only update this bar
         return;
       }
       // Consecutive Gap bar (edit)
