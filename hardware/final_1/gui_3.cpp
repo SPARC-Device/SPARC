@@ -5,6 +5,9 @@
 // --- Static variables for T9 state and UI ---
 static TFT_eSPI tft = TFT_eSPI();
 static String typedMessage = "";
+static bool cursorVisible = true;
+static unsigned long lastCursorBlink = 0;
+static const unsigned long cursorBlinkInterval = 500; // ms
 
 // T9 layout and state
 static const char* labels[12] = {
@@ -53,6 +56,22 @@ void gui3Setup() {
 // --- Main loop: handles periodic tasks (should be called in Arduino loop) ---
 void gui3Loop() {
     gui3CheckPopupTimeout();
+    // Handle cursor blinking
+    if (millis() - lastCursorBlink > cursorBlinkInterval) {
+        cursorVisible = !cursorVisible;
+        // Only redraw the cursor area, not the whole message box
+        int textWidth = tft.textWidth(typedMessage);
+        int cursorX = 15 + textWidth;
+        int cursorY = 25;
+        int cursorHeight = 24;
+        if (cursorVisible) {
+            tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
+        } else {
+            // Erase the cursor by overdrawing with background color
+            tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_NAVY);
+        }
+        lastCursorBlink = millis();
+    }
 }
 
 // --- Blink event: single blink ---
@@ -127,6 +146,12 @@ static void drawMessageBox() {
     tft.setTextSize(3);
     tft.setCursor(15, 25);
     tft.print(typedMessage);
+    // Draw cursor (always on when message box is redrawn)
+    int textWidth = tft.textWidth(typedMessage);
+    int cursorX = 15 + textWidth;
+    int cursorY = 25;
+    int cursorHeight = 24;
+    tft.drawLine(cursorX, cursorY, cursorX, cursorY + cursorHeight, TFT_WHITE);
 }
 
 static void drawT9Grid() {
