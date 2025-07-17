@@ -13,6 +13,7 @@ static unsigned long minBlinkDuration = 400; // Default is 400 ms
 static unsigned long blinkInterval = 1200;    // Default is 1500 ms
 static const unsigned long DEBOUNCE_DELAY = 50;
 static const unsigned long EMERGENCY_TIMEOUT = 7000;
+static unsigned long emergency_blink_interval = 250; // For emergency blink detection
 
 // State variables
 static bool currentEyeState = true;
@@ -65,7 +66,9 @@ void blinkWifiLoop() {
         // Eye just opened
         unsigned long blinkDuration = millis() - eyeCloseTime;
         digitalWrite(BLINK_LED_PIN, LOW); // Blink LED OFF
-        if (blinkDuration >= minBlinkDuration) {
+        // Use different min duration for emergency blinks
+        unsigned long currentMinBlinkDuration = (consecutiveBlinks >= 2) ? emergency_blink_interval : minBlinkDuration;
+        if (blinkDuration >= currentMinBlinkDuration) {
           unsigned long blinkGap = 0;
           if (lastBlinkEndTime != 0) {
             blinkGap = millis() - lastBlinkEndTime;
