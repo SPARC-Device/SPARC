@@ -10,7 +10,7 @@ static const int NAVIGATION_LED_PIN = 14; // Added navigation LED
 
 // Configurable blink detection
 static unsigned long minBlinkDuration = 400; // Default is 400 ms
-static unsigned long blinkInterval = 1500;    // Default is 800 ms
+static unsigned long blinkInterval = 1200;    // Default is 1500 ms
 static const unsigned long DEBOUNCE_DELAY = 50;
 static const unsigned long EMERGENCY_TIMEOUT = 7000;
 
