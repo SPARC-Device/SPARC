@@ -127,6 +127,10 @@ bool consecutiveGapT9EditMode = false;
 String editConsecutiveGapBuffer = "";
 String prevConsecutiveGapValue = "";
 
+// Add debounce flags for blink T9 keyboard
+bool blinkT9TouchActive = false;
+int blinkT9LastCell = -1;
+
 // --- Add new labels for blink settings T9 keyboard ---
 const char* blinkLabels[12] = {
   "1", "2", "3",
@@ -757,12 +761,22 @@ void handleTouch() {
     if (tft.getTouch(&tx, &ty)) {
       int t9Y = 160;
       int prevCell = editSelectedT9Cell;
+      int touchedCell = -1;
       for (int i = 0; i < 12; i++) {
         int col = i % 3;
         int row = i / 3;
         int x = 15 + col * (90 + 10);
         int y = t9Y + row * (60 + 10);
         if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
+          touchedCell = i;
+          break;
+        }
+      }
+      if (touchedCell != -1) {
+        if (!blinkT9TouchActive || blinkT9LastCell != touchedCell) {
+          blinkT9TouchActive = true;
+          blinkT9LastCell = touchedCell;
+          int i = touchedCell;
           if (i == 9) { // SAVE
             prevValidBlinkValue = String(minBlinkDuration);
             String digits = editValidBlinkBuffer;
@@ -810,7 +824,7 @@ void handleTouch() {
           }
         }
       }
-      // Popup bar area
+      // Popup bar area (no debounce needed for popup)
       int popupBarYFixed = 110;
       int popupBarHeightFixed = 40;
       int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
@@ -850,6 +864,10 @@ void handleTouch() {
         clearPopupBar();
         return;
       }
+    } else {
+      // No touch: reset debounce
+      blinkT9TouchActive = false;
+      blinkT9LastCell = -1;
     }
     // --- Popup timeout logic ---
     if (popupActiveEdit && (millis() - popupStartTimeEdit > popupTimeoutEdit)) {
@@ -864,12 +882,22 @@ if (consecutiveGapT9EditMode) {
     if (tft.getTouch(&tx, &ty)) {
       int t9Y = 160;
       int prevCell = editSelectedT9Cell;
+      int touchedCell = -1;
       for (int i = 0; i < 12; i++) {
         int col = i % 3;
         int row = i / 3;
         int x = 15 + col * (90 + 10);
         int y = t9Y + row * (60 + 10);
         if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
+          touchedCell = i;
+          break;
+        }
+      }
+      if (touchedCell != -1) {
+        if (!blinkT9TouchActive || blinkT9LastCell != touchedCell) {
+          blinkT9TouchActive = true;
+          blinkT9LastCell = touchedCell;
+          int i = touchedCell;
           if (i == 9) { // SAVE
             prevConsecutiveGapValue = String(consecutiveGap);
             String digits = editConsecutiveGapBuffer;
@@ -917,7 +945,7 @@ if (consecutiveGapT9EditMode) {
           }
         }
       }
-      // Popup bar area
+      // Popup bar area (no debounce needed for popup)
       int popupBarYFixed = 110;
       int popupBarHeightFixed = 40;
       int totalWidth = popupCountEdit * popupWidthEdit + (popupCountEdit - 1) * popupSpacingEdit;
@@ -957,6 +985,10 @@ if (consecutiveGapT9EditMode) {
         clearPopupBar();
         return;
       }
+    } else {
+      // No touch: reset debounce
+      blinkT9TouchActive = false;
+      blinkT9LastCell = -1;
     }
     // --- Popup timeout logic ---
     if (popupActiveEdit && (millis() - popupStartTimeEdit > popupTimeoutEdit)) {
