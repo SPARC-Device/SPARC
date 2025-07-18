@@ -2,6 +2,8 @@
 #include "emoji_arrays.h"
 #include "emoji_arrays3.h"
 #include <TFT_eSPI.h>
+#include "notif.h" // Add this include
+#include "setting_2.h" // For userId
 
 extern void openSettingsInterface();
 // --- Static variables for T9 state and UI ---
@@ -126,7 +128,12 @@ void gui3OnDoubleBlink() {
         } else if (sel == "_") {
             typedMessage += " ";
         } else if (sel == "toilet" || sel == "food" || sel == "doctor") {
-            typedMessage += sel;
+            // Send notification request based on selection
+            String type;
+            if (sel == "toilet") type = "RESTROOM";
+            else if (sel == "doctor") type = "DOCTOR_CALL";
+            else if (sel == "food") type = "FOOD";
+            sendNotificationRequest(userId, type);
         }  else if (sel=="."){ 
             typedMessage = "";
           } else {

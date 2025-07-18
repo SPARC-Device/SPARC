@@ -3,6 +3,7 @@
 #include "setting_2.h"
 
 int uiState = 0; // 0 = main, 1 = settings
+bool tftConnected = true;
 
 void openSettingsInterface() {
     uiState = 1;
@@ -16,7 +17,12 @@ void setup() {
 
 void loop() {
   if (uiState == 0) {
-    blinkWifiLoop();
+    if (!tftConnected) {
+      blinkWifiLoop();
+    } else {
+      // Placeholder: notification server logic will be implemented here
+      // notificationServerLoop();
+    }
     gui3Loop();
 
     // --- Blink navigation integration ---
