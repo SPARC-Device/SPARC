@@ -5,4 +5,4 @@ __pycache__/
 
 service-account.json
 google-services.json
-
+venv/

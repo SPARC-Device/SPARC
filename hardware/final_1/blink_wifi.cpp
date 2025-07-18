@@ -2,8 +2,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Preferences.h>
+#include "setting_2.h" // For userId
+#include "notif.h" // For sendNotificationRequest
 #include <EEPROM.h>
-#include "setting_2.h"
 // Pin assignments (update as needed)
 static const int IR_SENSOR_PIN = 36;
 static const int BLINK_LED_PIN = 25; // Changed from 19 to 25
@@ -165,6 +166,8 @@ void blinkWifiLoop() {
       emergencyMode = true;
       emergencyStartTime = millis();
       Serial.println("EMERGENCY MODE ACTIVATED!");
+      // Send emergency notification
+      sendNotificationRequest(userId, "EMERGENCY");
     }
     // Reset blink count after event
     consecutiveBlinks = 0;
