@@ -3,6 +3,6 @@ __pycache__/
 .vscode/
 .DS_Store
 
-*/service-account.json
-*/google-services.json
-*/venv/
+service-account.json
+google-services.json
+venv/
