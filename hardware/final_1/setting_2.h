@@ -11,4 +11,17 @@ void setting2Loop();
 // For now, only the main entry points are declared
 void drawT9Cell(int index, bool highlightYellow, bool blinkMode = false);
 
+#ifndef SETTING_2_H_USERID_GUARD
+#define SETTING_2_H_USERID_GUARD
+
+#include <Arduino.h>
+
+#define USERID_ADDR 140
+#define EEPROM_SIZE 200
+
+extern String userId;
+String readUserIdFromEEPROM();
+
+#endif
+
 #endif // SETTING_2_H 
