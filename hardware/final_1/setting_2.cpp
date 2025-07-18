@@ -33,6 +33,7 @@ void clearPopupTextEdit();
 #define PASS_ADDR 64
 #define MIN_BLINK_DURATION_ADDR 128
 #define CONSECUTIVE_GAP_ADDR 132
+#define USERID_ADDR 140 // EEPROM address for userId (5 chars + null)
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -71,7 +72,7 @@ bool popupActive = false;
 int selectedT9Key = -1;
 int selectedPopupLetter = -1;
 int settingsUiState = 0; // 0 = main menu, 1 = wifi, 2 = blink, 3 = edit, etc.
-String userId = "USER123456"; // Placeholder for user ID
+String userId = ""; // Only define here
 
 const int keyWidth = 90;
 const int keyHeight = 60;
@@ -1286,7 +1287,73 @@ if (consecutiveGapT9EditMode) {
 }
 // ... (copy the rest of the real settings UI code as needed)
 
+// Random string generator function (A-Z, a-z, 0-9)
+String generateRandomString(int length) {
+  String charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  String result = "";
+  for (int i = 0; i < length; i++) {
+    int randomIndex = random(charset.length());
+    result += charset[randomIndex];
+  }
+  return result;
+}
+
+// Custom random user ID generator with pattern: XdXdX (X=alphanumeric, d=digit)
+String generatePatternedUserId() {
+  String alphaNum = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  String digits = "0123456789";
+  String id = "";
+  for (int i = 0; i < 5; i++) {
+    if (i == 1 || i == 3) {
+      int idx = random(digits.length());
+      id += digits[idx];
+    } else {
+      int idx = random(alphaNum.length());
+      id += alphaNum[idx];
+    }
+  }
+  return id;
+}
+
+// Validate userId matches pattern: XdXdX
+bool isValidPatternedUserId(const String &id) {
+  if (id.length() != 5) return false;
+  for (int i = 0; i < 5; i++) {
+    char c = id[i];
+    if (i == 1 || i == 3) {
+      if (c < '0' || c > '9') return false;
+    } else {
+      if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) return false;
+    }
+  }
+  return true;
+}
+
+// Helper to write userId to EEPROM
+void writeUserIdToEEPROM(const String &id) {
+  for (int i = 0; i < 5; i++) {
+    EEPROM.write(USERID_ADDR + i, (i < id.length()) ? id[i] : '\0');
+  }
+  EEPROM.write(USERID_ADDR + 5, '\0'); // Null terminator
+  EEPROM.commit();
+}
+
+// Helper to read userId from EEPROM
+String readUserIdFromEEPROM() {
+  char data[6];
+  int len = 0;
+  unsigned char k = EEPROM.read(USERID_ADDR);
+  while (k != '\0' && k != 0xFF && len < 5) {
+    data[len] = k;
+    len++;
+    k = EEPROM.read(USERID_ADDR + len);
+  }
+  data[len] = '\0';
+  return String(data);
+}
+
 void setting2Setup() {
+    EEPROM.begin(EEPROM_SIZE); // Ensure EEPROM is initialized
     tft.setRotation(2);
     uint16_t calData[5] = { 471, 2859, 366, 3388, 2 }; // Same as gui3Setup
     tft.setTouch(calData);
@@ -1297,6 +1364,13 @@ void setting2Setup() {
     prevTypedPassword = typedPassword;
     prevMinBlinkDuration = minBlinkDuration;
     prevConsecutiveGap = consecutiveGap;
+    // Persistent userId logic with pattern check
+    userId = readUserIdFromEEPROM();
+    if (!isValidPatternedUserId(userId)) {
+        randomSeed(analogRead(0) + millis());
+        userId = generatePatternedUserId();
+        writeUserIdToEEPROM(userId);
+    }
     drawMainMenu();
 }
 
