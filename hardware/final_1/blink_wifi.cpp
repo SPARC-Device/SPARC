@@ -5,6 +5,9 @@
 #include "setting_2.h" // For userId
 #include "notif.h" // For sendNotificationRequest
 #include <EEPROM.h>
+#include "variable.h"
+
+
 // Pin assignments (update as needed)
 static const int IR_SENSOR_PIN = 36;
 static const int BLINK_LED_PIN = 25; // Changed from 19 to 25
@@ -14,48 +17,48 @@ static const int BUZZER_PIN = 26;
 static const int EMERGENCY_BUTTON_PIN = 12; // Emergency reset button moved to 14 from 22
 
 // Configurable blink detection
-static unsigned long blinkDuration = 400; // ms, default
-static unsigned long blinkGap = 1200;     // ms, default
-static const unsigned long DEBOUNCE_DELAY = 50;
-static const unsigned long EMERGENCY_TIMEOUT = 7000;
-static unsigned long emergency_blink_interval = 250; // For emergency blink detection
+int blinkDuration = 400; // ms, default
+int blinkGap = 1200;     // ms, default
+
+static const unsigned int DEBOUNCE_DELAY = 50;
+static const unsigned int EMERGENCY_TIMEOUT = 7000;
+static unsigned int emergency_blink_interval = 250; // For emergency blink detection
 
 // State variables
 static bool currentEyeState = true;
 static bool lastSensorReading = HIGH;
-static unsigned long eyeCloseTime = 0;
-static unsigned long lastDebounceTime = 0;
+static unsigned int eyeCloseTime = 0;
+static unsigned int lastDebounceTime = 0;
 static int consecutiveBlinks = 0;
-static unsigned long lastBlinkTime = 0;
-static unsigned long lastBlinkEndTime = 0; // For correct blink gap calculation
+static unsigned int lastBlinkTime = 0;
+static unsigned int lastBlinkEndTime = 0; // For correct blink gap calculation
 static bool emergencyMode = false;
-static unsigned long emergencyStartTime = 0;
+static unsigned int emergencyStartTime = 0;
 
 // Blink event flags for GUI
 static bool singleBlinkDetected = false;
 static bool doubleBlinkDetected = false;
 static bool quadBlinkDetected = false; // For 4 blinks (emergency)
 
+static bool blinkProcessed = false;
+
+
 // For deferred blink event processing
-static unsigned long lastBlinkEventTime = 0;
+static unsigned int lastBlinkEventTime = 0;
 
 // Preferences for persistent storage
 Preferences prefs;
 
 // WiFi and TCP server
-IPAddress local_IP(192, 168, 1, 13); // Set your static IP
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 255, 0);
+
 WiFiServer server(33333);
 WiFiClient client;
 bool clientConnected = false;
 
 // Configurable variables (moved from .ino)
-char ssid[33] = "Pushpa";
-char password[65] = "*#@09password";
-// minBlinkDuration and blinkInterval already exist
+String ssid = "Pushpa";
+String password = "*#@09password";
 
-// Use userId and readUserIdFromEEPROM() as declared in the header.
 
 // Function declarations for WiFi logic
 void processCommand(String cmd, Stream &out, bool fromWifi);
@@ -70,10 +73,92 @@ String serialCmdBuffer = "";
 
 // Helper functions for Preferences persistence
 
+int getBlinks(){
+   // IR sensor logic
+   bool sensorReading = digitalRead(IR_SENSOR_PIN);  // LOW = Eye closed
+
+   // Debounce check
+   if (sensorReading != lastSensorReading) {
+     lastDebounceTime = millis();
+   }
+ 
+   if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
+     bool eyeOpen = (sensorReading == HIGH);
+     if (eyeOpen != currentEyeState) {
+       if (!eyeOpen) {
+         // Eye just closed
+         eyeCloseTime = millis();
+         digitalWrite(BLINK_LED_PIN, HIGH); // Blink LED ON
+       } else {
+         // Eye just opened
+         unsigned long actualblinkDuration = millis() - eyeCloseTime;
+         digitalWrite(BLINK_LED_PIN, LOW); // Blink LED OFF
+         // Use different min duration for emergency blinks
+         unsigned long currentBlinkDuration = (consecutiveBlinks >= 2) ? emergency_blink_interval : blinkDuration;
+         if (actualblinkDuration >= currentBlinkDuration) {
+           unsigned long actualblinkGap = 0;
+           if (lastBlinkEndTime != 0) {
+             actualblinkGap = millis() - lastBlinkEndTime;
+           }
+           if (millis() - lastBlinkTime < blinkGap) {
+             consecutiveBlinks++;
+           } else {
+             consecutiveBlinks = 1;  // Reset count if too much time passed
+           }
+           lastBlinkTime = millis();
+           lastBlinkEndTime = millis(); // Update for next gap calculation
+           lastBlinkEventTime = millis(); // Update for deferred event
+           // Debug print
+           Serial.print("Blink #");
+           Serial.print(consecutiveBlinks);
+           Serial.print(", blinkDuration:");
+           Serial.print(blinkDuration);
+           Serial.print(", Duration: ");
+           Serial.print(actualblinkDuration);
+           Serial.print(" ms, Gap: ");
+           Serial.print(blinkGap);
+           Serial.print(" ms, Acutal Gap: ");
+           Serial.print(actualblinkGap);
+           Serial.println(" ms");
+         }
+       }
+       currentEyeState = eyeOpen;
+     }
+   }
+   lastSensorReading = sensorReading;
+
+   if (consecutiveBlinks > 0 && (millis() - lastBlinkEventTime > blinkGap+300)) {
+    consecutiveBlinks = 0;
+    blinkProcessed = false; // reset flag after full blink gap
+  }
+ 
+
+  if (!blinkProcessed) {
+    if (consecutiveBlinks == 1) {
+      singleBlinkDetected = true;
+      blinkProcessed = true;
+      Serial.println("[DEBUG] Single blink detected and flagged.");
+    } else if (consecutiveBlinks == 2) {
+      doubleBlinkDetected = true;
+      blinkProcessed = true;
+      Serial.println("[DEBUG] Double blink detected and flagged.");
+    } else if (consecutiveBlinks >= 4 && !emergencyMode) {
+      quadBlinkDetected = true;
+      blinkProcessed = true;
+      Serial.println("[DEBUG] Quad blink (emergency) detected and flagged.");
+      emergencyMode = true;
+      emergencyStartTime = millis();
+      Serial.println("EMERGENCY MODE ACTIVATED!");
+    }
+  }
+
+
+  
+  return consecutiveBlinks;
+}
 
 void blinkWifiSetup() {
-  Serial.begin(115200);
-  Serial.println("Booting...");
+  Serial.println("inside the wifi setup...");
   
   pinMode(IR_SENSOR_PIN, INPUT);
   pinMode(BLINK_LED_PIN, OUTPUT);
@@ -90,91 +175,26 @@ void blinkWifiSetup() {
   prefs.begin("blinkcfg", false);
   EEPROM.begin(EEPROM_SIZE); // Initialize EEPROM for userId only
   userId = readUserIdFromEEPROM();
-  loadBlinkSettingsFromPreferences();
-  loadConfig();
-  reconnectWiFi();
-  server.begin();
+ // reconnectWiFi();
+  
 }
 
 void blinkWifiLoop() {
-  // IR sensor logic
-  bool sensorReading = digitalRead(IR_SENSOR_PIN);  // LOW = Eye closed
+  server.begin();
+  if (clientConnected && singleBlinkDetected) {
+    client.print('1');
+  } else if (clientConnected && doubleBlinkDetected) {
+    client.print('2');
+  } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
+    client.print('4');
 
-  // Debounce check
-  if (sensorReading != lastSensorReading) {
-    lastDebounceTime = millis();
-  }
-
-  if ((millis() - lastDebounceTime) > DEBOUNCE_DELAY) {
-    bool eyeOpen = (sensorReading == HIGH);
-    if (eyeOpen != currentEyeState) {
-      if (!eyeOpen) {
-        // Eye just closed
-        eyeCloseTime = millis();
-        digitalWrite(BLINK_LED_PIN, HIGH); // Blink LED ON
-      } else {
-        // Eye just opened
-        unsigned long blinkDuration = millis() - eyeCloseTime;
-        digitalWrite(BLINK_LED_PIN, LOW); // Blink LED OFF
-        // Use different min duration for emergency blinks
-        unsigned long currentBlinkDuration = (consecutiveBlinks >= 2) ? emergency_blink_interval : blinkDuration;
-        if (blinkDuration >= currentBlinkDuration) {
-          unsigned long blinkGap = 0;
-          if (lastBlinkEndTime != 0) {
-            blinkGap = millis() - lastBlinkEndTime;
-          }
-          if (millis() - lastBlinkTime < blinkGap) {
-            consecutiveBlinks++;
-          } else {
-            consecutiveBlinks = 1;  // Reset count if too much time passed
-          }
-          lastBlinkTime = millis();
-          lastBlinkEndTime = millis(); // Update for next gap calculation
-          lastBlinkEventTime = millis(); // Update for deferred event
-          // Debug print
-          Serial.print("Blink #");
-          Serial.print(consecutiveBlinks);
-          Serial.print(", Duration: ");
-          Serial.print(blinkDuration);
-          Serial.print(" ms, Gap: ");
-          Serial.print(blinkGap);
-          Serial.println(" ms");
-        }
-      }
-      currentEyeState = eyeOpen;
-    }
-  }
-  lastSensorReading = sensorReading;
-
-  // Deferred blink event processing
-  if (consecutiveBlinks > 0 && (millis() - lastBlinkEventTime > blinkGap)) {
-    if (consecutiveBlinks == 1) {
-      singleBlinkDetected = true;
-      if (clientConnected && client.connected()) {
-        client.print('1');
-      }
-    } else if (consecutiveBlinks == 2) {
-      doubleBlinkDetected = true;
-      if (clientConnected && client.connected()) {
-        client.print('2');
-      }
-    } else if (consecutiveBlinks >= 4 && !emergencyMode) {
-      quadBlinkDetected = true;
-      if (clientConnected && client.connected()) {
-        client.print('4');
-      }
-      emergencyMode = true;
-      emergencyStartTime = millis();
-      Serial.println("EMERGENCY MODE ACTIVATED!");
-      // Send emergency notification
-      sendNotificationRequest(userId, "EMERGENCY");
-    }
-    // Reset blink count after event
-    consecutiveBlinks = 0;
+    // Send emergency notification
+    sendNotificationRequest(userId, "EMERGENCY");
   }
 
   // Emergency siren logic
   if (emergencyMode) {
+    Serial.print("emergency if statement");
     unsigned long elapsed = millis() - emergencyStartTime;
     // Siren pattern: 500ms ON, 500ms OFF
     if ((elapsed % 1000) < 500) {
@@ -243,6 +263,7 @@ void blinkWifiLoop() {
 bool blinkWifiCheckSingleBlink() {
   if (singleBlinkDetected) {
     singleBlinkDetected = false;
+    Serial.println("[DEBUG] Single blink event consumed by GUI.");
     return true;
   }
   return false;
@@ -251,6 +272,7 @@ bool blinkWifiCheckSingleBlink() {
 bool blinkWifiCheckDoubleBlink() {
   if (doubleBlinkDetected) {
     doubleBlinkDetected = false;
+    Serial.println("[DEBUG] Double blink event consumed by GUI.");
     return true;
   }
   return false;
@@ -260,6 +282,7 @@ bool blinkWifiCheckDoubleBlink() {
 bool blinkWifiCheckQuadBlink() {
   if (quadBlinkDetected) {
     quadBlinkDetected = false;
+    Serial.println("[DEBUG] Quad blink event consumed by GUI.");
     return true;
   }
   return false;
@@ -268,30 +291,8 @@ bool blinkWifiCheckQuadBlink() {
 void processCommand(String cmd, Stream &out, bool fromWifi) {
   cmd.trim();
   cmd.toUpperCase();
-  if (cmd.startsWith("SET_SSID:")) {
-    String newSsid = cmd.substring(9);
-    newSsid.trim();
-    if (newSsid.length() > 0 && newSsid.length() < 33) {
-      newSsid.toCharArray(ssid, 33);
-      saveConfig();
-      out.print("SSID updated to: "); out.print(ssid);
-      out.print("\n");
-      reconnectWiFi();
-    } else {
-      out.print("Invalid SSID length\n");
-    }
-  } else if (cmd.startsWith("SET_PASS:")) {
-    String newPass = cmd.substring(9);
-    newPass.trim();
-    if (newPass.length() > 0 && newPass.length() < 65) {
-      newPass.toCharArray(password, 65);
-      saveConfig();
-      out.print("Password updated\n");
-      reconnectWiFi();
-    } else {
-      out.print("Invalid password length\n");
-    }
-  } else if (cmd.startsWith("SET_MINBLINK:")) {
+  
+   if (cmd.startsWith("SET_MINBLINK:")) {
     String val = cmd.substring(13);
     unsigned long v = val.toInt();
     if (v >= 100 && v <= 5000) {
@@ -330,7 +331,7 @@ void loadConfig() {
   Serial.println("Loading configuration from Preferences...");
   // Load or set defaults
   if (prefs.isKey("ssid")) {
-    prefs.getString("ssid").toCharArray(ssid, 33);
+    ssid=prefs.getString("ssid","");
     Serial.print("Loaded SSID: ");
     Serial.println(ssid);
   } else {
@@ -338,7 +339,7 @@ void loadConfig() {
     Serial.println(ssid);
   }
   if (prefs.isKey("pass")) {
-    prefs.getString("pass").toCharArray(password, 65);
+    password=prefs.getString("pass","");
     Serial.println("Loaded password from Preferences");
   } else {
     Serial.println("Using default password");
@@ -352,8 +353,6 @@ void loadConfig() {
 }
 
 void saveConfig() {
-  prefs.putString("ssid", String(ssid));
-  prefs.putString("pass", String(password));
   prefs.putULong("blinkDuration", blinkDuration);
   prefs.putULong("blinkGap", blinkGap);
 }
@@ -364,8 +363,6 @@ void reconnectWiFi() {
   delay(100);
   Serial.println("Setting WiFi mode to STA...");
   WiFi.mode(WIFI_STA);
-  Serial.println("Configuring static IP: 192.168.1.184");
-  WiFi.config(local_IP, gateway, subnet);
   Serial.print("Connecting to WiFi SSID: ");
   Serial.println(ssid);
   WiFi.begin(ssid, password);
@@ -388,3 +385,10 @@ void reconnectWiFi() {
     Serial.println(WiFi.status());
   }
 } 
+
+
+void blinkWifiResetFlags() {
+  doubleBlinkDetected = false;
+  singleBlinkDetected = false;
+  quadBlinkDetected = false;
+}

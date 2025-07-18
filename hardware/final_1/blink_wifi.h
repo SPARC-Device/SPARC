@@ -5,5 +5,8 @@ void blinkWifiSetup();
 void blinkWifiLoop();
 bool blinkWifiCheckSingleBlink();
 bool blinkWifiCheckDoubleBlink();
+void reconnectWiFi();
+int getBlinks();
+void blinkWifiResetFlags();
 
 #endif // BLINK_WIFI_H 

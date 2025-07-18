@@ -1,9 +1,8 @@
 #include "notif.h"
 #include <WiFi.h>
+#include <Arduino.h>
 
-IPAddress local_IP(192, 168, 1, 13); // Set your static IP
-IPAddress gateway(192, 168, 1, 1);
-IPAddress subnet(255, 255, 255, 0);
+
 
 WiFiServer notificationServer(5000);
 WiFiClient notificationClient;

@@ -3,7 +3,8 @@
 #include "emoji_arrays3.h"
 #include <TFT_eSPI.h>
 #include "notif.h" // Add this include
-#include "setting_2.h" // For userId
+#include "variable.h"
+
 
 extern void openSettingsInterface();
 // --- Static variables for T9 state and UI ---
@@ -92,6 +93,7 @@ void gui3Loop() {
 
 // --- Blink event: single blink ---
 void gui3OnSingleBlink() {
+  //  Serial.println("[DEBUG] gui3OnSingleBlink() called: Single blink navigation in GUI.");
     if (popupActive && popupSelecting) {
         // Move to next popup button (cyclic)
         int prevPopup = popupIndex;
@@ -109,6 +111,7 @@ void gui3OnSingleBlink() {
 
 // --- Blink event: double blink ---
 void gui3OnDoubleBlink() {
+  //  Serial.println("[DEBUG] gui3OnDoubleBlink() called: Double blink selection in GUI.");
     if (!popupActive) {
         // Select current cell, show popup, turn cell yellow
         drawButton(selectedCell, false, true); // green border
@@ -133,7 +136,7 @@ void gui3OnDoubleBlink() {
             if (sel == "toilet") type = "RESTROOM";
             else if (sel == "doctor") type = "DOCTOR_CALL";
             else if (sel == "food") type = "FOOD";
-            sendNotificationRequest(userId, type);
+           sendNotificationRequest(userId, type); 
         }  else if (sel=="."){ 
             typedMessage = "";
           } else {

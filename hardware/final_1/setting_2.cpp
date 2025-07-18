@@ -3,6 +3,9 @@
 #include <TFT_eSPI.h>
 #include <SPI.h>
 #include <Preferences.h>
+#include "variable.h"
+#include "blink_wifi.h"
+
 
 extern Preferences prefs;
 extern int uiState;
@@ -40,29 +43,6 @@ void clearPopupTextEdit();
 
 TFT_eSPI tft = TFT_eSPI();
 
-String currentSSID = "";
-String currentPassword = "";
-unsigned long blinkDuration = 400; // ms, default
-unsigned long blinkGap = 1200;     // ms, default
-const unsigned long debounceDelay = 50;
-
-bool currentEyeState = true;
-bool lastSensorReading = HIGH;
-
-unsigned long eyeCloseTime = 0;
-unsigned long lastDebounceTime = 0;
-
-int consecutiveBlinks = 0;
-unsigned long lastBlinkTime = 0;
-
-bool emergencyMode = false;
-unsigned long emergencyStartTime = 0;
-
-String typedSSID = "";
-String typedPassword = "";
-bool ssidInputMode = true;
-bool inKeyboardMode = false;
-bool inBlinkEditMode = false;
 bool inEditScreen = false;
 int blinkEditField = 0; // 0: minBlinkDuration, 1: consecutiveGap
 
@@ -74,11 +54,7 @@ int selectedPopupLetter = -1;
 int settingsUiState = 0; // 0 = main menu, 1 = wifi, 2 = blink, 3 = edit, etc.
 String userId = ""; // Only define here
 
-const int keyWidth = 90;
-const int keyHeight = 60;
-const int spacing = 10;
-const int xOffset = 15;
-const int yOffset = 180;
+
 const int popupBarY = 130;
 const int popupBarHeight = 30;
 
@@ -90,16 +66,10 @@ const char* labels[12] = {
 };
 
 unsigned long popupStartTime = 0;
-int activePopupIndex = -1;
-int popupCount = 0;
-String lastPopupChars[6];
-int popupWidth = 50;
-int popupSpacing = 5;
-int popupXPositions[6];
 
 // Add missing variable definitions
-String prevTypedSSID = "";
-String prevTypedPassword = "";
+String prevssid;
+String prevpassword;
 unsigned long prevBlinkDuration = 400;
 unsigned long prevBlinkGap = 1200;
 
@@ -115,23 +85,16 @@ String prevSSIDBeforeEdit = "";
 
 // Add a flag and buffer for WiFi Password T9 edit mode
 bool wifiPassT9EditMode = false;
-String prevTypedPasswordBeforeEdit = "";
 
 // Add a flag and buffer for Valid Blink T9 edit mode
 bool validBlinkT9EditMode = false;
-String prevValidBlinkValue = "";
 
 // Add a flag and buffer for Consecutive Gap T9 edit mode
 bool consecutiveGapT9EditMode = false;
-String prevConsecutiveGapValue = "";
 
 // Add debounce flags for blink T9 keyboard
 bool blinkT9TouchActive = false;
 int blinkT9LastCell = -1;
-
-// Remove staging variables for blink settings
-// unsigned long editBlinkDuration = 400;
-// unsigned long editBlinkGap = 1200;
 
 // --- Add new labels for blink settings T9 keyboard ---
 const char* blinkLabels[12] = {
@@ -178,7 +141,7 @@ void drawMinimalEditScreen() {
     tft.fillRect(16, 81, 288, 38, TFT_BLACK);
     tft.setTextColor(TFT_CYAN);
     tft.setCursor(20, 100);
-    tft.print(typedSSID); // Changed from editBuffer to typedSSID
+    tft.print(ssid); // Changed from editBuffer to ssid
     // T9 grid
     for (int i = 0; i < 12; i++) {
         int col = i % 3;
@@ -197,19 +160,19 @@ void drawMinimalEditScreen() {
     if (popupActiveEdit) drawPopupEdit();
 }
 
-// Remove EEPROM helpers for WiFi credentials
 // Add Preferences-based save/load for WiFi credentials
 void saveWiFiToPreferences() {
     // Trim SSID and password before saving
-    String trimmedSSID = trimString(typedSSID);
-    String trimmedPassword = removeAllSpaces(typedPassword);
+    String trimmedSSID = trimString(ssid);
+    String trimmedPassword = removeAllSpaces(password);
     prefs.begin("blinkcfg", false);
     prefs.putString("ssid", trimmedSSID);
     prefs.putString("pass", trimmedPassword);
     prefs.end();
     // Update the variables everywhere
-    typedSSID = trimmedSSID;
-    typedPassword = trimmedPassword;
+    ssid = trimmedSSID;
+    password = trimmedPassword;
+    reconnectWiFi();
 }
 
 void loadWiFiFromPreferences() {
@@ -218,8 +181,8 @@ void loadWiFiFromPreferences() {
     String loadedPassword = prefs.getString("pass", "");
     prefs.end();
     // Trim after loading
-    typedSSID = trimString(loadedSSID);
-    typedPassword = removeAllSpaces(loadedPassword);
+    ssid = trimString(loadedSSID);
+    password = removeAllSpaces(loadedPassword);
 }
 
 void saveBlinkSettingsToPreferences() {
@@ -246,9 +209,6 @@ void loadBlinkSettingsFromPreferences() {
 
 
 
-
-
-
 // Replace all saveWiFiToEEPROM() calls with saveWiFiToPreferences()
 // Replace all loadConfigFromEEPROM() calls with loadWiFiFromPreferences()
 
@@ -269,7 +229,7 @@ void drawValueBar() {
   tft.setTextColor(TFT_CYAN);
   if (blinkEditField == 0 || blinkEditField == 1) tft.setCursor(23, 70);
   else tft.setCursor(23, 70);
-  tft.print(typedSSID); // Changed from editBuffer to typedSSID
+  tft.print(ssid); // Changed from editBuffer to ssid
 }
 
 // Remove the old clearPopupBar function (the one using popupBarY = 100, popupBarHeight = 40)
@@ -325,8 +285,8 @@ void drawMainMenu() {
   tft.setCursor(200, btnY+12);
   tft.print("Cancel");
   // Store previous values for Save/Cancel
-  prevTypedSSID = typedSSID;
-  prevTypedPassword = typedPassword;
+  prevssid = ssid;
+  prevpassword = password;
   prevBlinkDuration = blinkDuration;
   prevBlinkGap = blinkGap;
   // Initialize staging variables
@@ -348,7 +308,7 @@ void drawWiFiMenu() {
   tft.fillRect(16, 81, 288, 38, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
   tft.setCursor(20, 100);
-  tft.print(typedSSID);
+  tft.print(ssid);
   tft.setTextColor(TFT_WHITE);
   tft.setCursor(15, 140);
   tft.print("Password");
@@ -356,7 +316,7 @@ void drawWiFiMenu() {
   tft.fillRect(16, 171, 288, 38, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
   tft.setCursor(20, 190);
-  tft.print(typedPassword);
+  tft.print(password);
   tft.setTextColor(TFT_YELLOW);
   tft.drawRect(10, 370, 100, 40, TFT_WHITE);
   tft.setCursor(30, 380);
@@ -442,7 +402,7 @@ void drawWifiNameT9EditScreen() {
     tft.setTextSize(2);
     tft.setCursor(15, 10);
     tft.print("WIFI-NAME");
-    drawMessageBar(typedSSID);
+    drawMessageBar(ssid);
     clearPopupBar();
     if (popupActiveEdit) drawPopupBar();
     for (int i = 0; i < 12; i++) drawT9Cell(i, false);
@@ -458,7 +418,7 @@ void drawWifiPassT9EditScreen() {
     tft.setTextSize(2);
     tft.setCursor(15, 10);
     tft.print("WIFI-PASSWORD");
-    drawMessageBar(typedPassword);
+    drawMessageBar(password);
     clearPopupBar();
     if (popupActiveEdit) drawPopupBar();
     for (int i = 0; i < 12; i++) drawT9Cell(i, false);
@@ -491,7 +451,7 @@ void handleTouch() {
             delay(100);
             drawT9Cell(i, false);
 
-            typedSSID = trimString(typedSSID); // added this line 
+            ssid = trimString(ssid); // added this line 
             wifiNameT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
@@ -520,8 +480,8 @@ void handleTouch() {
             tft.print(labels[i]);
             delay(100);
             drawT9Cell(i, false);
-            typedSSID = "";
-            drawMessageBar(typedSSID);
+            ssid = "";
+            drawMessageBar(ssid);
             return;
           } else {
             // Normal T9 cell: highlight and show popup
@@ -558,22 +518,22 @@ void handleTouch() {
           tft.setCursor(tx2, ty2);
           tft.print(sel);
           delay(120);
-          if (typedSSID.length() < 24 || sel == "<") {
+          if (ssid.length() < 24 || sel == "<") {
             if (sel == "<") {
-              if (typedSSID.length()) typedSSID.remove(typedSSID.length()-1);
+              if (ssid.length()) ssid.remove(ssid.length()-1);
             } else if (sel == "_") {
-              typedSSID += " ";
+              ssid += " ";
             } else if (sel == "0") {
-              typedSSID += "0";
+              ssid += "0";
             } else {
-              typedSSID += sel;
+              ssid += sel;
             }
           }
           popupActiveEdit = false;
           if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
           editSelectedT9Cell = -1;
           clearPopupBar();
-          drawMessageBar(typedSSID);
+          drawMessageBar(ssid);
           return;
         }
       }
@@ -624,11 +584,11 @@ void handleTouch() {
             tft.print(sel);
             delay(120);
             if (sel == "<") {
-              typedSSID = typedSSID.substring(0, typedSSID.length() - 1);
+              ssid = ssid.substring(0, ssid.length() - 1);
             } else if (sel == "_") {
-              typedSSID += " ";
+              ssid += " ";
             } else {
-              typedSSID += sel;
+              ssid += sel;
             }
             popupActiveEdit = false;
             editSelectedT9Cell = -1;
@@ -698,7 +658,7 @@ void handleTouch() {
             delay(100);
             drawT9Cell(i, false);
 
-            typedPassword = removeAllSpaces(typedPassword); // added this line
+            password = removeAllSpaces(password); // added this line
             wifiPassT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
@@ -726,8 +686,8 @@ void handleTouch() {
             tft.print(labels[i]);
             delay(100);
             drawT9Cell(i, false);
-            typedPassword = "";
-            drawMessageBar(typedPassword);
+            password = "";
+            drawMessageBar(password);
             return;
           } else {
             // Normal T9 cell: highlight and show popup
@@ -764,22 +724,22 @@ void handleTouch() {
           tft.setCursor(tx2, ty2);
           tft.print(sel);
           delay(120);
-          if (typedPassword.length() < 24 || sel == "<") {
+          if (password.length() < 24 || sel == "<") {
             if (sel == "<") {
-              if (typedPassword.length()) typedPassword.remove(typedPassword.length()-1);
+              if (password.length()) password.remove(password.length()-1);
             } else if (sel == "_") {
-              typedPassword += " ";
+              password += " ";
             } else if (sel == "0") {
-              typedPassword += "0";
+              password += "0";
             } else {
-              typedPassword += sel;
+              password += sel;
             }
           }
           popupActiveEdit = false;
           if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
           editSelectedT9Cell = -1;
           clearPopupBar();
-          drawMessageBar(typedPassword);
+          drawMessageBar(password);
           return;
         }
       }
@@ -1101,8 +1061,8 @@ if (consecutiveGapT9EditMode) {
         tft.print("Save");
         delay(120);
         // Save all current values to Preferences and update prev* variables
-        prevTypedSSID = typedSSID;
-        prevTypedPassword = typedPassword;
+        prevssid = ssid;
+        prevpassword = password;
         prevBlinkDuration = blinkDuration;
         prevBlinkGap = blinkGap;
         saveWiFiToPreferences();
@@ -1120,8 +1080,8 @@ if (consecutiveGapT9EditMode) {
         tft.print("Cancel");
         delay(120);
         // Restore all values from prev* variables
-        typedSSID = prevTypedSSID;
-        typedPassword = prevTypedPassword;
+        ssid = prevssid;
+        password = prevpassword;
         blinkDuration = prevBlinkDuration;
         blinkGap = prevBlinkGap;
         // Do NOT call any save function here
@@ -1140,8 +1100,7 @@ if (consecutiveGapT9EditMode) {
       if (tx >= 15 && tx <= 305 && ty >= 80 && ty <= 120) {
         blinkEditField = 0; // SSID
         editHeading = getEditHeading(blinkEditField);
-        typedSSID = typedSSID; // Use typedSSID directly
-        prevSSIDBeforeEdit = typedSSID;
+      
         wifiNameT9EditMode = true;
         editSelectedT9Cell = -1;
         popupActiveEdit = false;
@@ -1152,8 +1111,7 @@ if (consecutiveGapT9EditMode) {
       if (tx >= 15 && tx <= 305 && ty >= 170 && ty <= 210) {
         blinkEditField = 1; // Password
         editHeading = getEditHeading(blinkEditField);
-        typedPassword = typedPassword; // Use typedPassword directly
-        prevTypedPasswordBeforeEdit = typedPassword;
+      
         wifiPassT9EditMode = true;
         editSelectedT9Cell = -1;
         popupActiveEdit = false;
@@ -1305,11 +1263,11 @@ if (consecutiveGapT9EditMode) {
             tft.print(sel);
             delay(120);
             if (sel == "<") {
-              typedSSID = typedSSID.substring(0, typedSSID.length() - 1);
+              ssid = ssid.substring(0, ssid.length() - 1);
             } else if (sel == "_") {
-              typedSSID += " ";
+              ssid += " ";
             } else {
-              typedSSID += sel;
+              ssid += sel;
             }
             popupActiveEdit = false;
             editSelectedT9Cell = -1;
@@ -1347,8 +1305,8 @@ if (consecutiveGapT9EditMode) {
       }
       // Save button
       if (tx >= 30 && tx <= 150 && ty >= 420 && ty <= 460) {
-        if (blinkEditField == 0) typedSSID = typedSSID;
-        else if (blinkEditField == 1) typedPassword = typedPassword;
+        if (blinkEditField == 0) ssid = ssid;
+        else if (blinkEditField == 1) password = password;
         saveWiFiToPreferences();
         settingsUiState = 1;
         editKeyboardActive = false;
@@ -1455,8 +1413,8 @@ void setting2Setup() {
     tft.setTouch(calData);
     loadWiFiFromPreferences();
     loadBlinkSettingsFromPreferences();
-    prevTypedSSID = typedSSID;
-    prevTypedPassword = typedPassword;
+    prevssid = ssid;
+    prevpassword = password;
     prevBlinkDuration = blinkDuration;
     prevBlinkGap = blinkGap;
     // Persistent userId logic with pattern check
@@ -1509,7 +1467,7 @@ void drawEditScreen() {
     tft.fillRect(16, 81, 288, 38, TFT_BLACK);
     tft.setTextColor(TFT_CYAN);
     tft.setCursor(20, 100);
-    tft.print(typedSSID); // Changed from editBuffer to typedSSID
+    tft.print(ssid); // Changed from editBuffer to ssid
     // If keyboard is active, draw T9 grid
     if (editKeyboardActive) {
         for (int i = 0; i < 12; i++) {
