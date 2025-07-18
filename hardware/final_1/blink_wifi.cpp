@@ -2,8 +2,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Preferences.h>
-#include "setting_2.h"
 #include <EEPROM.h>
+#include "setting_2.h"
 // Pin assignments (update as needed)
 static const int IR_SENSOR_PIN = 36;
 static const int BLINK_LED_PIN = 25; // Changed from 19 to 25
@@ -13,8 +13,8 @@ static const int BUZZER_PIN = 26;
 static const int EMERGENCY_BUTTON_PIN = 12; // Emergency reset button moved to 14 from 22
 
 // Configurable blink detection
-static unsigned long minBlinkDuration = 400; // Default is 400 ms
-static unsigned long blinkInterval = 1200;    // Default is 1500 ms
+static unsigned long blinkDuration = 400; // ms, default
+static unsigned long blinkGap = 1200;     // ms, default
 static const unsigned long DEBOUNCE_DELAY = 50;
 static const unsigned long EMERGENCY_TIMEOUT = 7000;
 static unsigned long emergency_blink_interval = 250; // For emergency blink detection
@@ -67,6 +67,9 @@ void sendStatus(Stream &out);
 String wifiCmdBuffer = "";
 String serialCmdBuffer = "";
 
+// Helper functions for Preferences persistence
+
+
 void blinkWifiSetup() {
   Serial.begin(115200);
   Serial.println("Booting...");
@@ -84,8 +87,9 @@ void blinkWifiSetup() {
 
   // WiFi/Preferences setup
   prefs.begin("blinkcfg", false);
-  EEPROM.begin(EEPROM_SIZE); // Initialize EEPROM
+  EEPROM.begin(EEPROM_SIZE); // Initialize EEPROM for userId only
   userId = readUserIdFromEEPROM();
+  loadBlinkSettingsFromPreferences();
   loadConfig();
   reconnectWiFi();
   server.begin();
@@ -112,13 +116,13 @@ void blinkWifiLoop() {
         unsigned long blinkDuration = millis() - eyeCloseTime;
         digitalWrite(BLINK_LED_PIN, LOW); // Blink LED OFF
         // Use different min duration for emergency blinks
-        unsigned long currentMinBlinkDuration = (consecutiveBlinks >= 2) ? emergency_blink_interval : minBlinkDuration;
-        if (blinkDuration >= currentMinBlinkDuration) {
+        unsigned long currentBlinkDuration = (consecutiveBlinks >= 2) ? emergency_blink_interval : blinkDuration;
+        if (blinkDuration >= currentBlinkDuration) {
           unsigned long blinkGap = 0;
           if (lastBlinkEndTime != 0) {
             blinkGap = millis() - lastBlinkEndTime;
           }
-          if (millis() - lastBlinkTime < blinkInterval) {
+          if (millis() - lastBlinkTime < blinkGap) {
             consecutiveBlinks++;
           } else {
             consecutiveBlinks = 1;  // Reset count if too much time passed
@@ -142,7 +146,7 @@ void blinkWifiLoop() {
   lastSensorReading = sensorReading;
 
   // Deferred blink event processing
-  if (consecutiveBlinks > 0 && (millis() - lastBlinkEventTime > blinkInterval)) {
+  if (consecutiveBlinks > 0 && (millis() - lastBlinkEventTime > blinkGap)) {
     if (consecutiveBlinks == 1) {
       singleBlinkDetected = true;
       if (clientConnected && client.connected()) {
@@ -196,7 +200,7 @@ void blinkWifiLoop() {
     if (client) {
       clientConnected = true;
       // Send config string: minBlinkDuration;blinkInterval;ssid;password;userId (added userId)
-      String config = String(minBlinkDuration) + ";" + String(blinkInterval) + ";" + ssid + ";" + password + ";" + userId;
+      String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
       client.print(config); // No newline
     }
   } else if (!client.connected()) {
@@ -288,9 +292,9 @@ void processCommand(String cmd, Stream &out, bool fromWifi) {
     String val = cmd.substring(13);
     unsigned long v = val.toInt();
     if (v >= 100 && v <= 5000) {
-      minBlinkDuration = v;
-      saveConfig();
-      out.print("Min blink duration updated to: "); out.print(minBlinkDuration); out.print("\n");
+      blinkDuration = v;
+      saveBlinkSettingsToPreferences();
+      out.print("Min blink duration updated to: "); out.print(blinkDuration); out.print("\n");
     } else {
       out.print("Invalid min blink duration\n");
     }
@@ -298,9 +302,9 @@ void processCommand(String cmd, Stream &out, bool fromWifi) {
     String val = cmd.substring(13);
     unsigned long v = val.toInt();
     if (v >= 200 && v <= 10000) {
-      blinkInterval = v;
-      saveConfig();
-      out.print("Blink interval updated to: "); out.print(blinkInterval); out.print("\n");
+      blinkGap = v;
+      saveBlinkSettingsToPreferences();
+      out.print("Blink interval updated to: "); out.print(blinkGap); out.print("\n");
     } else {
       out.print("Invalid blink interval\n");
     }
@@ -314,8 +318,8 @@ void processCommand(String cmd, Stream &out, bool fromWifi) {
 void sendStatus(Stream &out) {
   out.print("SSID: "); out.print(ssid); out.print("\n");
   out.print("Password: "); out.print(password); out.print("\n");
-  out.print("Min Blink Duration: "); out.print(minBlinkDuration); out.print("\n");
-  out.print("Blink Interval: "); out.print(blinkInterval); out.print("\n");
+  out.print("Min Blink Duration: "); out.print(blinkDuration); out.print("\n");
+  out.print("Blink Interval: "); out.print(blinkGap); out.print("\n");
   out.print("WiFi IP: "); out.print(WiFi.localIP()); out.print("\n");
 }
 
@@ -336,19 +340,19 @@ void loadConfig() {
   } else {
     Serial.println("Using default password");
   }
-  minBlinkDuration = prefs.getULong("minblink", minBlinkDuration);
-  blinkInterval = prefs.getULong("blinkint", blinkInterval);
+  blinkDuration = prefs.getULong("blinkDuration", blinkDuration);
+  blinkGap = prefs.getULong("blinkGap", blinkGap);
   Serial.print("Min blink duration: ");
-  Serial.println(minBlinkDuration);
+  Serial.println(blinkDuration);
   Serial.print("Blink interval: ");
-  Serial.println(blinkInterval);
+  Serial.println(blinkGap);
 }
 
 void saveConfig() {
   prefs.putString("ssid", String(ssid));
   prefs.putString("pass", String(password));
-  prefs.putULong("minblink", minBlinkDuration);
-  prefs.putULong("blinkint", blinkInterval);
+  prefs.putULong("blinkDuration", blinkDuration);
+  prefs.putULong("blinkGap", blinkGap);
 }
 
 void reconnectWiFi() {

@@ -2,6 +2,11 @@
 #include <EEPROM.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
+#include <Preferences.h>
+
+extern Preferences prefs;
+extern int uiState;
+extern void gui3Setup();
 
 // --- Forward declarations for T9 helpers ---
 void drawMessageBar(const String& msg);
@@ -31,16 +36,14 @@ void clearPopupTextEdit();
 #define EEPROM_SIZE 200
 #define SSID_ADDR 0
 #define PASS_ADDR 64
-#define MIN_BLINK_DURATION_ADDR 128
-#define CONSECUTIVE_GAP_ADDR 132
 #define USERID_ADDR 140 // EEPROM address for userId (5 chars + null)
 
 TFT_eSPI tft = TFT_eSPI();
 
 String currentSSID = "";
 String currentPassword = "";
-unsigned long minBlinkDuration = 400;
-unsigned long consecutiveGap = 1200;
+unsigned long blinkDuration = 400; // ms, default
+unsigned long blinkGap = 1200;     // ms, default
 const unsigned long debounceDelay = 50;
 
 bool currentEyeState = true;
@@ -62,11 +65,8 @@ bool inKeyboardMode = false;
 bool inBlinkEditMode = false;
 bool inEditScreen = false;
 int blinkEditField = 0; // 0: minBlinkDuration, 1: consecutiveGap
-String blinkEditBuffer = "";
 
 // Add new variables for edit mode
-String editBuffer = "";
-int editField = -1; // 0: Name, 1: PASS, 2: Valid Blink, 3: Consecutive Gap
 String editHeading = "";
 bool popupActive = false;
 int selectedT9Key = -1;
@@ -100,8 +100,8 @@ int popupXPositions[6];
 // Add missing variable definitions
 String prevTypedSSID = "";
 String prevTypedPassword = "";
-unsigned long prevMinBlinkDuration = 400;
-unsigned long prevConsecutiveGap = 2000;
+unsigned long prevBlinkDuration = 400;
+unsigned long prevBlinkGap = 1200;
 
 // Add a flag to track if the T9 keyboard is active in edit mode
 bool editKeyboardActive = false;
@@ -115,22 +115,23 @@ String prevSSIDBeforeEdit = "";
 
 // Add a flag and buffer for WiFi Password T9 edit mode
 bool wifiPassT9EditMode = false;
-String editPassBuffer = "";
 String prevTypedPasswordBeforeEdit = "";
 
 // Add a flag and buffer for Valid Blink T9 edit mode
 bool validBlinkT9EditMode = false;
-String editValidBlinkBuffer = "";
 String prevValidBlinkValue = "";
 
 // Add a flag and buffer for Consecutive Gap T9 edit mode
 bool consecutiveGapT9EditMode = false;
-String editConsecutiveGapBuffer = "";
 String prevConsecutiveGapValue = "";
 
 // Add debounce flags for blink T9 keyboard
 bool blinkT9TouchActive = false;
 int blinkT9LastCell = -1;
+
+// Remove staging variables for blink settings
+// unsigned long editBlinkDuration = 400;
+// unsigned long editBlinkGap = 1200;
 
 // --- Add new labels for blink settings T9 keyboard ---
 const char* blinkLabels[12] = {
@@ -139,6 +140,23 @@ const char* blinkLabels[12] = {
   "7", "8", "9",
   "SAVE", "0_<", "CLEAR"
 };
+
+String trimString(const String& str) {   //triming 
+  int start = 0;
+  int end = str.length() - 1;
+  while (start <= end && str[start] == ' ') start++;
+  while (end >= start && str[end] == ' ') end--;
+  return str.substring(start, end + 1);
+}
+
+
+String removeAllSpaces(const String& str) {  // remove all spaces
+  String out = "";
+  for (int i = 0; i < str.length(); ++i) {
+    if (str[i] != ' ') out += str[i];
+  }
+  return out;
+}
 
 // Draw minimal edit screen: heading, message box, T9 keyboard only
 void drawMinimalEditScreen() {
@@ -160,7 +178,7 @@ void drawMinimalEditScreen() {
     tft.fillRect(16, 81, 288, 38, TFT_BLACK);
     tft.setTextColor(TFT_CYAN);
     tft.setCursor(20, 100);
-    tft.print(editBuffer);
+    tft.print(typedSSID); // Changed from editBuffer to typedSSID
     // T9 grid
     for (int i = 0; i < 12; i++) {
         int col = i % 3;
@@ -179,65 +197,60 @@ void drawMinimalEditScreen() {
     if (popupActiveEdit) drawPopupEdit();
 }
 
-// EEPROM helpers
-void writeStringToEEPROM(int addrOffset, const String &str) {
-  int len = str.length();
-  for (int i = 0; i < len; i++) EEPROM.write(addrOffset + i, str[i]);
-  EEPROM.write(addrOffset + len, '\0');
-  EEPROM.commit();
+// Remove EEPROM helpers for WiFi credentials
+// Add Preferences-based save/load for WiFi credentials
+void saveWiFiToPreferences() {
+    // Trim SSID and password before saving
+    String trimmedSSID = trimString(typedSSID);
+    String trimmedPassword = removeAllSpaces(typedPassword);
+    prefs.begin("blinkcfg", false);
+    prefs.putString("ssid", trimmedSSID);
+    prefs.putString("pass", trimmedPassword);
+    prefs.end();
+    // Update the variables everywhere
+    typedSSID = trimmedSSID;
+    typedPassword = trimmedPassword;
 }
 
-String readStringFromEEPROM(int addrOffset) {
-  char data[64];
-  int len = 0;
-  unsigned char k = EEPROM.read(addrOffset);
-  while (k != '\0' && len < 63) {
-    data[len] = k;
-    len++;
-    k = EEPROM.read(addrOffset + len);
-  }
-  data[len] = '\0';
-  return String(data);
+void loadWiFiFromPreferences() {
+    prefs.begin("blinkcfg", false);
+    String loadedSSID = prefs.getString("ssid", "");
+    String loadedPassword = prefs.getString("pass", "");
+    prefs.end();
+    // Trim after loading
+    typedSSID = trimString(loadedSSID);
+    typedPassword = removeAllSpaces(loadedPassword);
 }
 
-String trimString(const String& str) {
-  int start = 0;
-  int end = str.length() - 1;
-  while (start <= end && str[start] == ' ') start++;
-  while (end >= start && str[end] == ' ') end--;
-  return str.substring(start, end + 1);
+void saveBlinkSettingsToPreferences() {
+  if (blinkDuration < 100) blinkDuration = 100;
+  if (blinkDuration > 2000) blinkDuration = 2000;
+  if (blinkGap < 500) blinkGap = 500;
+  if (blinkGap > 5000) blinkGap = 5000;
+  prefs.begin("blinkcfg", false);
+  prefs.putULong("blinkDuration", blinkDuration);
+  prefs.putULong("blinkGap", blinkGap);
+  prefs.end();
 }
 
-String removeAllSpaces(const String& str) {
-  String out = "";
-  for (int i = 0; i < str.length(); ++i) {
-    if (str[i] != ' ') out += str[i];
-  }
-  return out;
+void loadBlinkSettingsFromPreferences() {
+  prefs.begin("blinkcfg", false);
+  blinkDuration = prefs.getULong("blinkDuration", 400);
+  blinkGap = prefs.getULong("blinkGap", 1200);
+  prefs.end();
+  if (blinkDuration < 100) blinkDuration = 100;
+  if (blinkDuration > 2000) blinkDuration = 2000;
+  if (blinkGap < 500) blinkGap = 500;
+  if (blinkGap > 5000) blinkGap = 5000;
 }
 
-void saveWiFiToEEPROM() {
-  currentSSID = trimString(typedSSID);
-  currentPassword = trimString(typedPassword);
-  typedSSID = currentSSID;
-  typedPassword = currentPassword;
-  writeStringToEEPROM(SSID_ADDR, currentSSID);
-  writeStringToEEPROM(PASS_ADDR, currentPassword);
-  EEPROM.commit();
-}
 
-void saveConfigToEEPROM() {
-  EEPROM.put(MIN_BLINK_DURATION_ADDR, minBlinkDuration);
-  EEPROM.put(CONSECUTIVE_GAP_ADDR, consecutiveGap);
-  EEPROM.commit();
-}
 
-void loadConfigFromEEPROM() {
-  currentSSID = readStringFromEEPROM(SSID_ADDR);
-  currentPassword = readStringFromEEPROM(PASS_ADDR);
-  EEPROM.get(MIN_BLINK_DURATION_ADDR, minBlinkDuration);
-  EEPROM.get(CONSECUTIVE_GAP_ADDR, consecutiveGap);
-}
+
+
+
+// Replace all saveWiFiToEEPROM() calls with saveWiFiToPreferences()
+// Replace all loadConfigFromEEPROM() calls with loadWiFiFromPreferences()
 
 String getEditHeading(int field) {
   switch (field) {
@@ -254,9 +267,9 @@ void drawValueBar() {
   tft.drawRect(15, 50, 290, 40, TFT_WHITE);
   tft.fillRect(16, 51, 288, 38, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
-  if (editField == 0 || editField == 1) tft.setCursor(23, 70);
+  if (blinkEditField == 0 || blinkEditField == 1) tft.setCursor(23, 70);
   else tft.setCursor(23, 70);
-  tft.print(editBuffer);
+  tft.print(typedSSID); // Changed from editBuffer to typedSSID
 }
 
 // Remove the old clearPopupBar function (the one using popupBarY = 100, popupBarHeight = 40)
@@ -311,6 +324,14 @@ void drawMainMenu() {
   tft.drawRect(170, btnY, btnW, btnH, TFT_WHITE);
   tft.setCursor(200, btnY+12);
   tft.print("Cancel");
+  // Store previous values for Save/Cancel
+  prevTypedSSID = typedSSID;
+  prevTypedPassword = typedPassword;
+  prevBlinkDuration = blinkDuration;
+  prevBlinkGap = blinkGap;
+  // Initialize staging variables
+  // editBlinkDuration = blinkDuration; // Removed
+  // editBlinkGap = blinkGap; // Removed
 }
 
 // Add missing function definitions from setting_2.ino
@@ -359,7 +380,7 @@ void drawBlinkMenu() {
   tft.fillRect(barX+1, barY1+1, barW-2, barH-2, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
   tft.setCursor(barX+10, barY1+20-8);
-  tft.print(String(minBlinkDuration));
+  tft.print(String(blinkDuration));
   tft.fillRect(barX-40, barY1, 35, barH, TFT_RED);
   tft.drawRect(barX-40, barY1, 35, barH, TFT_WHITE);
   tft.setTextColor(TFT_WHITE);
@@ -380,7 +401,7 @@ void drawBlinkMenu() {
   tft.fillRect(barX+1, barY2+1, barW-2, barH-2, TFT_BLACK);
   tft.setTextColor(TFT_CYAN);
   tft.setCursor(barX+10, barY2+20-8);
-  tft.print(String(consecutiveGap));
+  tft.print(String(blinkGap));
   tft.fillRect(barX-40, barY2, 35, barH, TFT_RED);
   tft.drawRect(barX-40, barY2, 35, barH, TFT_WHITE);
   tft.setTextColor(TFT_WHITE);
@@ -410,16 +431,6 @@ void drawBlinkMenu() {
   tft.print("Back");
 }
 
-void drawPlaceholderPage() {
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextColor(TFT_YELLOW);
-  tft.setTextSize(2);
-  tft.setCursor(40, 200);
-  tft.print("Placeholder Page");
-  tft.setTextColor(TFT_WHITE);
-  tft.setCursor(40, 240);
-  tft.print("(Redirected after Save/Cancel)");
-}
 
 // Add forward declaration for drawEditScreen
 void drawEditScreen();
@@ -431,7 +442,7 @@ void drawWifiNameT9EditScreen() {
     tft.setTextSize(2);
     tft.setCursor(15, 10);
     tft.print("WIFI-NAME");
-    drawMessageBar(editBuffer);
+    drawMessageBar(typedSSID);
     clearPopupBar();
     if (popupActiveEdit) drawPopupBar();
     for (int i = 0; i < 12; i++) drawT9Cell(i, false);
@@ -447,7 +458,7 @@ void drawWifiPassT9EditScreen() {
     tft.setTextSize(2);
     tft.setCursor(15, 10);
     tft.print("WIFI-PASSWORD");
-    drawMessageBar(editPassBuffer);
+    drawMessageBar(typedPassword);
     clearPopupBar();
     if (popupActiveEdit) drawPopupBar();
     for (int i = 0; i < 12; i++) drawT9Cell(i, false);
@@ -469,15 +480,24 @@ void handleTouch() {
         if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
           // Handle special cells
           if (i == 9) { // SAVE
-            prevSSIDBeforeEdit = typedSSID;
-            typedSSID = editBuffer;
+            // Draw green background and black text for 100ms
+            tft.fillRect(x, y, 90, 60, TFT_GREEN);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_BLACK);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(labels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(labels[i]);
+            delay(100);
+            drawT9Cell(i, false);
+
+            typedSSID = trimString(typedSSID); // added this line 
             wifiNameT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
             drawWiFiMenu();
             return;
           } else if (i == 10) { // 0 _<
-            // Show popup bar for 0 _ <
             if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false);
             editSelectedT9Cell = i;
             drawT9Cell(i, true);
@@ -490,8 +510,18 @@ void handleTouch() {
             }
             return;
           } else if (i == 11) { // CLEAR
-            editBuffer = "";
-            drawMessageBar(editBuffer);
+            // Draw red background for 100ms
+            tft.fillRect(x, y, 90, 60, TFT_RED);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_WHITE);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(labels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(labels[i]);
+            delay(100);
+            drawT9Cell(i, false);
+            typedSSID = "";
+            drawMessageBar(typedSSID);
             return;
           } else {
             // Normal T9 cell: highlight and show popup
@@ -518,7 +548,6 @@ void handleTouch() {
         int px = popupX + i * (popupWidthEdit + popupSpacingEdit);
         if (tx >= px && tx <= px+popupWidthEdit && ty >= popupBarYFixed && ty <= popupBarYFixed+popupBarHeightFixed) {
           String sel = lastPopupCharsEdit[i];
-          // Highlight popup button green
           tft.fillRect(px, popupBarYFixed, popupWidthEdit, popupBarHeightFixed, TFT_BLACK);
           for (int t = 0; t < 3; ++t) tft.drawRect(px + t, popupBarYFixed + t, popupWidthEdit - 2 * t, popupBarHeightFixed - 2 * t, TFT_GREEN);
           tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -529,22 +558,22 @@ void handleTouch() {
           tft.setCursor(tx2, ty2);
           tft.print(sel);
           delay(120);
-          if (editBuffer.length() < 24 || sel == "<") {
+          if (typedSSID.length() < 24 || sel == "<") {
             if (sel == "<") {
-              if (editBuffer.length()) editBuffer.remove(editBuffer.length()-1);
+              if (typedSSID.length()) typedSSID.remove(typedSSID.length()-1);
             } else if (sel == "_") {
-              editBuffer += " ";
+              typedSSID += " ";
             } else if (sel == "0") {
-              editBuffer += "0";
+              typedSSID += "0";
             } else {
-              editBuffer += sel;
+              typedSSID += sel;
             }
           }
           popupActiveEdit = false;
           if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
           editSelectedT9Cell = -1;
           clearPopupBar();
-          drawMessageBar(editBuffer);
+          drawMessageBar(typedSSID);
           return;
         }
       }
@@ -554,7 +583,6 @@ void handleTouch() {
         if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
         editSelectedT9Cell = -1;
         clearPopupBar();
-        return;
       }
     }
     // --- Popup timeout logic ---
@@ -596,11 +624,11 @@ void handleTouch() {
             tft.print(sel);
             delay(120);
             if (sel == "<") {
-              if (editBuffer.length()) editBuffer.remove(editBuffer.length()-1);
+              typedSSID = typedSSID.substring(0, typedSSID.length() - 1);
             } else if (sel == "_") {
-              editBuffer += " ";
+              typedSSID += " ";
             } else {
-              editBuffer += sel;
+              typedSSID += sel;
             }
             popupActiveEdit = false;
             editSelectedT9Cell = -1;
@@ -660,15 +688,23 @@ void handleTouch() {
         if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
           // Handle special cells
           if (i == 9) { // SAVE
-            prevTypedPassword = typedPassword;
-            typedPassword = editPassBuffer;
+            tft.fillRect(x, y, 90, 60, TFT_GREEN);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_BLACK);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(labels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(labels[i]);
+            delay(100);
+            drawT9Cell(i, false);
+
+            typedPassword = removeAllSpaces(typedPassword); // added this line
             wifiPassT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
             drawWiFiMenu();
             return;
           } else if (i == 10) { // 0 _<
-            // Show popup bar for 0 _ <
             if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false);
             editSelectedT9Cell = i;
             drawT9Cell(i, true);
@@ -681,8 +717,17 @@ void handleTouch() {
             }
             return;
           } else if (i == 11) { // CLEAR
-            editPassBuffer = "";
-            drawMessageBar(editPassBuffer);
+            tft.fillRect(x, y, 90, 60, TFT_RED);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_WHITE);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(labels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(labels[i]);
+            delay(100);
+            drawT9Cell(i, false);
+            typedPassword = "";
+            drawMessageBar(typedPassword);
             return;
           } else {
             // Normal T9 cell: highlight and show popup
@@ -709,7 +754,6 @@ void handleTouch() {
         int px = popupX + i * (popupWidthEdit + popupSpacingEdit);
         if (tx >= px && tx <= px+popupWidthEdit && ty >= popupBarYFixed && ty <= popupBarYFixed+popupBarHeightFixed) {
           String sel = lastPopupCharsEdit[i];
-          // Highlight popup button green
           tft.fillRect(px, popupBarYFixed, popupWidthEdit, popupBarHeightFixed, TFT_BLACK);
           for (int t = 0; t < 3; ++t) tft.drawRect(px + t, popupBarYFixed + t, popupWidthEdit - 2 * t, popupBarHeightFixed - 2 * t, TFT_GREEN);
           tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -720,22 +764,22 @@ void handleTouch() {
           tft.setCursor(tx2, ty2);
           tft.print(sel);
           delay(120);
-          if (editPassBuffer.length() < 24 || sel == "<") {
+          if (typedPassword.length() < 24 || sel == "<") {
             if (sel == "<") {
-              if (editPassBuffer.length()) editPassBuffer.remove(editPassBuffer.length()-1);
+              if (typedPassword.length()) typedPassword.remove(typedPassword.length()-1);
             } else if (sel == "_") {
-              editPassBuffer += " ";
+              typedPassword += " ";
             } else if (sel == "0") {
-              editPassBuffer += "0";
+              typedPassword += "0";
             } else {
-              editPassBuffer += sel;
+              typedPassword += sel;
             }
           }
           popupActiveEdit = false;
           if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
           editSelectedT9Cell = -1;
           clearPopupBar();
-          drawMessageBar(editPassBuffer);
+          drawMessageBar(typedPassword);
           return;
         }
       }
@@ -745,7 +789,6 @@ void handleTouch() {
         if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false);
         editSelectedT9Cell = -1;
         clearPopupBar();
-        return;
       }
     }
     // --- Popup timeout logic ---
@@ -778,21 +821,26 @@ void handleTouch() {
           blinkT9TouchActive = true;
           blinkT9LastCell = touchedCell;
           int i = touchedCell;
+          int col = touchedCell % 3;
+          int row = touchedCell / 3;
+          int x = 15 + col * (90 + 10);
+          int y = 160 + row * (60 + 10);
           if (i == 9) { // SAVE
-            prevValidBlinkValue = String(minBlinkDuration);
-            String digits = editValidBlinkBuffer;
-            int firstNonZero = 0;
-            while (firstNonZero < digits.length() && digits[firstNonZero] == '0') firstNonZero++;
-            digits = digits.substring(firstNonZero);
-            if (digits.length() == 0) minBlinkDuration = 0;
-            else minBlinkDuration = digits.substring(0, 10).toInt();
-            saveConfigToEEPROM();
+            tft.fillRect(x, y, 90, 60, TFT_GREEN);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_BLACK);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(blinkLabels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(blinkLabels[i]);
+            delay(100);
+            drawT9Cell(i, false, true);
             validBlinkT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
             drawBlinkMenu();
             return;
-          } else if (i == 10) { // 0_<
+          } else if (i == 10) { // 0_<=
             if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false, true);
             editSelectedT9Cell = i;
             drawT9Cell(i, true, true);
@@ -813,13 +861,22 @@ void handleTouch() {
             drawPopupBar();
             return;
           } else if (i == 11) { // CLEAR
-            editValidBlinkBuffer = "0";
-            drawMessageBar(editValidBlinkBuffer);
+            tft.fillRect(x, y, 90, 60, TFT_RED);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_WHITE);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(blinkLabels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(blinkLabels[i]);
+            delay(100);
+            drawT9Cell(i, false, true);
+            blinkDuration = 0;
+            drawMessageBar(String(blinkDuration));
             return;
           } else if (i >= 0 && i <= 8) { // 1-9
-            if (editValidBlinkBuffer.length() < 10) {
-                editValidBlinkBuffer += String(i+1);
-                drawMessageBar(editValidBlinkBuffer);
+            if (String(blinkDuration).length() < 10) {
+                blinkDuration = blinkDuration * 10 + (i + 1);
+                drawMessageBar(String(blinkDuration));
             }
             return;
           }
@@ -845,15 +902,15 @@ void handleTouch() {
           tft.print(sel);
           delay(120);
           if (sel == "<") {
-            if (editValidBlinkBuffer.length()) editValidBlinkBuffer.remove(editValidBlinkBuffer.length()-1);
+            blinkDuration = blinkDuration / 10; // Remove last digit
           } else if (sel == "0") {
-            if (editValidBlinkBuffer.length() < 10) editValidBlinkBuffer += "0";
+            if (String(blinkDuration).length() < 10) blinkDuration = blinkDuration * 10;
           } // ignore _ for numeric
           popupActiveEdit = false;
           if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
           editSelectedT9Cell = -1;
           clearPopupBar();
-          drawMessageBar(editValidBlinkBuffer);
+          drawMessageBar(String(blinkDuration));
           return;
         }
       }
@@ -899,21 +956,26 @@ if (consecutiveGapT9EditMode) {
           blinkT9TouchActive = true;
           blinkT9LastCell = touchedCell;
           int i = touchedCell;
+          int col = touchedCell % 3;
+          int row = touchedCell / 3;
+          int x = 15 + col * (90 + 10);
+          int y = 160 + row * (60 + 10);
           if (i == 9) { // SAVE
-            prevConsecutiveGapValue = String(consecutiveGap);
-            String digits = editConsecutiveGapBuffer;
-            int firstNonZero = 0;
-            while (firstNonZero < digits.length() && digits[firstNonZero] == '0') firstNonZero++;
-            digits = digits.substring(firstNonZero);
-            if (digits.length() == 0) consecutiveGap = 0;
-            else consecutiveGap = digits.substring(0, 10).toInt();
-            saveConfigToEEPROM();
+            tft.fillRect(x, y, 90, 60, TFT_GREEN);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_BLACK);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(blinkLabels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(blinkLabels[i]);
+            delay(100);
+            drawT9Cell(i, false, true);
             consecutiveGapT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
             drawBlinkMenu();
             return;
-          } else if (i == 10) { // 0_<
+          } else if (i == 10) { // 0_<=
             if (prevCell != -1 && prevCell != i) drawT9Cell(prevCell, false, true);
             editSelectedT9Cell = i;
             drawT9Cell(i, true, true);
@@ -934,13 +996,22 @@ if (consecutiveGapT9EditMode) {
             drawPopupBar();
             return;
           } else if (i == 11) { // CLEAR
-            editConsecutiveGapBuffer = "0";
-            drawMessageBar(editConsecutiveGapBuffer);
+            tft.fillRect(x, y, 90, 60, TFT_RED);
+            tft.drawRect(x, y, 90, 60, TFT_WHITE);
+            tft.setTextColor(TFT_WHITE);
+            tft.setTextSize(2);
+            int textWidth = tft.textWidth(blinkLabels[i]);
+            tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
+            tft.print(blinkLabels[i]);
+            delay(100);
+            drawT9Cell(i, false, true);
+            blinkGap = 0;
+            drawMessageBar(String(blinkGap));
             return;
           } else if (i >= 0 && i <= 8) { // 1-9
-            if (editConsecutiveGapBuffer.length() < 10) {
-                editConsecutiveGapBuffer += String(i+1);
-                drawMessageBar(editConsecutiveGapBuffer);
+            if (String(blinkGap).length() < 10) {
+                blinkGap = blinkGap * 10 + (i + 1);
+                drawMessageBar(String(blinkGap));
             }
             return;
           }
@@ -966,15 +1037,15 @@ if (consecutiveGapT9EditMode) {
           tft.print(sel);
           delay(120);
           if (sel == "<") {
-            if (editConsecutiveGapBuffer.length()) editConsecutiveGapBuffer.remove(editConsecutiveGapBuffer.length()-1);
+            blinkGap = blinkGap / 10; // Remove last digit
           } else if (sel == "0") {
-            if (editConsecutiveGapBuffer.length() < 10) editConsecutiveGapBuffer += "0";
+            if (String(blinkGap).length() < 10) blinkGap = blinkGap * 10;
           } // ignore _ for numeric
           popupActiveEdit = false;
           if (editSelectedT9Cell != -1) drawT9Cell(editSelectedT9Cell, false, true);
           editSelectedT9Cell = -1;
           clearPopupBar();
-          drawMessageBar(editConsecutiveGapBuffer);
+          drawMessageBar(String(blinkGap));
           return;
         }
       }
@@ -1029,8 +1100,15 @@ if (consecutiveGapT9EditMode) {
         tft.setCursor(60, 432);
         tft.print("Save");
         delay(120);
-        drawPlaceholderPage();
-        settingsUiState = 4;
+        // Save all current values to Preferences and update prev* variables
+        prevTypedSSID = typedSSID;
+        prevTypedPassword = typedPassword;
+        prevBlinkDuration = blinkDuration;
+        prevBlinkGap = blinkGap;
+        saveWiFiToPreferences();
+        saveBlinkSettingsToPreferences();
+        uiState = 0;
+        gui3Setup();
         return;
       }
       // Cancel button
@@ -1041,14 +1119,15 @@ if (consecutiveGapT9EditMode) {
         tft.setCursor(200, 432);
         tft.print("Cancel");
         delay(120);
+        // Restore all values from prev* variables
         typedSSID = prevTypedSSID;
         typedPassword = prevTypedPassword;
-        minBlinkDuration = prevMinBlinkDuration;
-        consecutiveGap = prevConsecutiveGap;
-        saveWiFiToEEPROM();
-        saveConfigToEEPROM();
-        drawPlaceholderPage();
-        settingsUiState = 4;
+        blinkDuration = prevBlinkDuration;
+        blinkGap = prevBlinkGap;
+        // Do NOT call any save function here
+        // Return to main T9 interface
+        uiState = 0;
+        gui3Setup();
         return;
       }
     }
@@ -1059,9 +1138,9 @@ if (consecutiveGapT9EditMode) {
     if (tft.getTouch(&tx, &ty)) {
       // Name bar
       if (tx >= 15 && tx <= 305 && ty >= 80 && ty <= 120) {
-        editField = 0; // SSID
-        editHeading = getEditHeading(editField);
-        editBuffer = typedSSID;
+        blinkEditField = 0; // SSID
+        editHeading = getEditHeading(blinkEditField);
+        typedSSID = typedSSID; // Use typedSSID directly
         prevSSIDBeforeEdit = typedSSID;
         wifiNameT9EditMode = true;
         editSelectedT9Cell = -1;
@@ -1071,9 +1150,9 @@ if (consecutiveGapT9EditMode) {
       }
       // Password bar
       if (tx >= 15 && tx <= 305 && ty >= 170 && ty <= 210) {
-        editField = 1; // Password
-        editHeading = getEditHeading(editField);
-        editPassBuffer = typedPassword;
+        blinkEditField = 1; // Password
+        editHeading = getEditHeading(blinkEditField);
+        typedPassword = typedPassword; // Use typedPassword directly
         prevTypedPasswordBeforeEdit = typedPassword;
         wifiPassT9EditMode = true;
         editSelectedT9Cell = -1;
@@ -1107,29 +1186,36 @@ if (consecutiveGapT9EditMode) {
         tft.setCursor(barX-30, barY1+8);
         tft.print("-");
         delay(120);
-        minBlinkDuration = (minBlinkDuration >= 10) ? minBlinkDuration-10 : 0;
-        saveConfigToEEPROM();
-        drawBlinkMenu();
+        blinkDuration = (blinkDuration >= 10) ? blinkDuration-10 : 0;
+        // Only redraw the value inside the white rectangle
+        tft.fillRect(barX+1, barY1+1, barW-2, barH-2, TFT_BLACK);
+        tft.setTextColor(TFT_CYAN);
+        tft.setTextSize(2);
+        tft.setCursor(barX+10, barY1+20-8);
+        tft.print(String(blinkDuration));
         return;
       }
       // Valid Blink '+' button
       if (tx >= barX+barW+5 && tx <= barX+barW+40 && ty >= barY1 && ty <= barY1+barH) {
         tft.fillRect(barX+barW+5, barY1, 35, barH, TFT_GREEN);
         tft.drawRect(barX+barW+5, barY1, 35, barH, TFT_WHITE);
-        tft.setTextColor(TFT_WHITE);
+        tft.setTextColor(TFT_BLACK);
         tft.setTextSize(3);
         tft.setCursor(barX+barW+15, barY1+8);
         tft.print("+");
         delay(120);
-        minBlinkDuration += 10;
-        saveConfigToEEPROM();
-        drawBlinkMenu();
+        blinkDuration += 10;
+        // Only redraw the value inside the white rectangle
+        tft.fillRect(barX+1, barY1+1, barW-2, barH-2, TFT_BLACK);
+        tft.setTextColor(TFT_CYAN);
+        tft.setTextSize(2);
+        tft.setCursor(barX+10, barY1+20-8);
+        tft.print(String(blinkDuration));
         return;
       }
       // Valid Blink bar (edit)
       if (tx >= barX && tx <= barX+barW && ty >= barY1 && ty <= barY1+barH) {
         validBlinkT9EditMode = true;
-        editValidBlinkBuffer = String(minBlinkDuration);
         editSelectedT9Cell = -1;
         popupActiveEdit = false;
         drawValidBlinkT9EditScreen();
@@ -1144,29 +1230,36 @@ if (consecutiveGapT9EditMode) {
         tft.setCursor(barX-30, barY2+8);
         tft.print("-");
         delay(120);
-        consecutiveGap = (consecutiveGap >= 10) ? consecutiveGap-10 : 0;
-        saveConfigToEEPROM();
-        drawBlinkMenu();
+        blinkGap = (blinkGap >= 10) ? blinkGap-10 : 0;
+        // Only redraw the value inside the white rectangle
+        tft.fillRect(barX+1, barY2+1, barW-2, barH-2, TFT_BLACK);
+        tft.setTextColor(TFT_CYAN);
+        tft.setTextSize(2);
+        tft.setCursor(barX+10, barY2+20-8);
+        tft.print(String(blinkGap));
         return;
       }
       // Consecutive Gap '+' button
       if (tx >= barX+barW+5 && tx <= barX+barW+40 && ty >= barY2 && ty <= barY2+barH) {
         tft.fillRect(barX+barW+5, barY2, 35, barH, TFT_GREEN);
         tft.drawRect(barX+barW+5, barY2, 35, barH, TFT_WHITE);
-        tft.setTextColor(TFT_WHITE);
+        tft.setTextColor(TFT_BLACK);
         tft.setTextSize(3);
         tft.setCursor(barX+barW+15, barY2+8);
         tft.print("+");
         delay(120);
-        consecutiveGap += 10;
-        saveConfigToEEPROM();
-        drawBlinkMenu();
+        blinkGap += 10;
+        // Only redraw the value inside the white rectangle
+        tft.fillRect(barX+1, barY2+1, barW-2, barH-2, TFT_BLACK);
+        tft.setTextColor(TFT_CYAN);
+        tft.setTextSize(2);
+        tft.setCursor(barX+10, barY2+20-8);
+        tft.print(String(blinkGap));
         return;
       }
       // Consecutive Gap bar (edit)
       if (tx >= barX && tx <= barX+barW && ty >= barY2 && ty <= barY2+barH) {
         consecutiveGapT9EditMode = true;
-        editConsecutiveGapBuffer = String(consecutiveGap);
         editSelectedT9Cell = -1;
         popupActiveEdit = false;
         drawConsecutiveGapT9EditScreen();
@@ -1212,11 +1305,11 @@ if (consecutiveGapT9EditMode) {
             tft.print(sel);
             delay(120);
             if (sel == "<") {
-              if (editBuffer.length()) editBuffer.remove(editBuffer.length()-1);
+              typedSSID = typedSSID.substring(0, typedSSID.length() - 1);
             } else if (sel == "_") {
-              editBuffer += " ";
+              typedSSID += " ";
             } else {
-              editBuffer += sel;
+              typedSSID += sel;
             }
             popupActiveEdit = false;
             editSelectedT9Cell = -1;
@@ -1254,9 +1347,9 @@ if (consecutiveGapT9EditMode) {
       }
       // Save button
       if (tx >= 30 && tx <= 150 && ty >= 420 && ty <= 460) {
-        if (editField == 0) typedSSID = editBuffer;
-        else if (editField == 1) typedPassword = editBuffer;
-        saveWiFiToEEPROM();
+        if (blinkEditField == 0) typedSSID = typedSSID;
+        else if (blinkEditField == 1) typedPassword = typedPassword;
+        saveWiFiToPreferences();
         settingsUiState = 1;
         editKeyboardActive = false;
         editSelectedT9Cell = -1;
@@ -1352,18 +1445,20 @@ String readUserIdFromEEPROM() {
   return String(data);
 }
 
+// Helper functions for Preferences persistence
+
+
 void setting2Setup() {
-    EEPROM.begin(EEPROM_SIZE); // Ensure EEPROM is initialized
+    // No EEPROM for settings, only for userId if needed
     tft.setRotation(2);
     uint16_t calData[5] = { 471, 2859, 366, 3388, 2 }; // Same as gui3Setup
     tft.setTouch(calData);
-    loadConfigFromEEPROM();
-    typedSSID = currentSSID;
-    typedPassword = currentPassword;
+    loadWiFiFromPreferences();
+    loadBlinkSettingsFromPreferences();
     prevTypedSSID = typedSSID;
     prevTypedPassword = typedPassword;
-    prevMinBlinkDuration = minBlinkDuration;
-    prevConsecutiveGap = consecutiveGap;
+    prevBlinkDuration = blinkDuration;
+    prevBlinkGap = blinkGap;
     // Persistent userId logic with pattern check
     userId = readUserIdFromEEPROM();
     if (!isValidPatternedUserId(userId)) {
@@ -1414,7 +1509,7 @@ void drawEditScreen() {
     tft.fillRect(16, 81, 288, 38, TFT_BLACK);
     tft.setTextColor(TFT_CYAN);
     tft.setCursor(20, 100);
-    tft.print(editBuffer);
+    tft.print(typedSSID); // Changed from editBuffer to typedSSID
     // If keyboard is active, draw T9 grid
     if (editKeyboardActive) {
         for (int i = 0; i < 12; i++) {
@@ -1575,7 +1670,7 @@ void drawValidBlinkT9EditScreen() {
     tft.setTextSize(2);
     tft.setCursor(15, 10);
     tft.print("Valid Blink");
-    drawMessageBar(editValidBlinkBuffer);
+    drawMessageBar(String(blinkDuration));
     clearPopupBar();
     if (popupActiveEdit) drawPopupBar();
     for (int i = 0; i < 12; i++) drawT9Cell(i, false, true); // true = blink mode
@@ -1587,8 +1682,9 @@ void drawConsecutiveGapT9EditScreen() {
     tft.setTextSize(2);
     tft.setCursor(15, 10);
     tft.print("Consecutive Gap");
-    drawMessageBar(editConsecutiveGapBuffer);
+    drawMessageBar(String(blinkGap));
     clearPopupBar();
     if (popupActiveEdit) drawPopupBar();
     for (int i = 0; i < 12; i++) drawT9Cell(i, false, true);
 } 
+

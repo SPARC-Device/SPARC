@@ -11,6 +11,9 @@ void setting2Loop();
 // For now, only the main entry points are declared
 void drawT9Cell(int index, bool highlightYellow, bool blinkMode = false);
 
+extern void saveBlinkSettingsToPreferences();
+extern void loadBlinkSettingsFromPreferences();
+
 #ifndef SETTING_2_H_USERID_GUARD
 #define SETTING_2_H_USERID_GUARD
 
