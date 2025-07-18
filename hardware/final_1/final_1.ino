@@ -13,25 +13,34 @@ void openSettingsInterface() {
     setting2Setup();
 }
 
-IPAddress local_IP(192, 168, 1, 13); // Set your static IP
-IPAddress gateway(192, 168, 1, 1);
+IPAddress local_IP(192, 168, 120, 13); // Set your static IP
+IPAddress gateway(192, 168, 120, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 
 void setup() {
   Serial.begin(115200);  
   loadWiFiFromPreferences();
-    WiFi.config(local_IP, gateway, subnet);
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(1000);
-      Serial.println("Connecting to WiFi...");
-    }
-    Serial.println("Connected to WiFi");
-    notificationServerSetup();
-    blinkWifiSetup();
-    gui3Setup();
+  WiFi.config(local_IP, gateway, subnet);
+  WiFi.begin(ssid, password);
+  
+  // Try to connect for 10 seconds
+  unsigned long startTime = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - startTime) < 10000) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
   }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("Connected to WiFi");
+  } else {
+    Serial.println("WiFi connection failed - continuing without WiFi");
+  }
+  
+  notificationServerSetup();
+  blinkWifiSetup();
+  gui3Setup();
+}
 
 void loop() {
   getBlinks();

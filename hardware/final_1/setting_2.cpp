@@ -208,10 +208,6 @@ void loadBlinkSettingsFromPreferences() {
 }
 
 
-
-// Replace all saveWiFiToEEPROM() calls with saveWiFiToPreferences()
-// Replace all loadConfigFromEEPROM() calls with loadWiFiFromPreferences()
-
 String getEditHeading(int field) {
   switch (field) {
     case 0: return "WIFI-NAME";
@@ -1061,12 +1057,17 @@ if (consecutiveGapT9EditMode) {
         tft.print("Save");
         delay(120);
         // Save all current values to Preferences and update prev* variables
-        prevssid = ssid;
+
+        if(prevssid != ssid || prevpassword != password){
+          prevssid = ssid;
         prevpassword = password;
-        prevBlinkDuration = blinkDuration;
-        prevBlinkGap = blinkGap;
         saveWiFiToPreferences();
-        saveBlinkSettingsToPreferences();
+        }
+        if(prevBlinkDuration != blinkDuration || prevBlinkGap != blinkGap){
+          prevBlinkDuration = blinkDuration;
+          prevBlinkGap = blinkGap;
+          saveBlinkSettingsToPreferences();
+        }
         uiState = 0;
         gui3Setup();
         return;
@@ -1303,27 +1304,27 @@ if (consecutiveGapT9EditMode) {
           return;
         }
       }
-      // Save button
-      if (tx >= 30 && tx <= 150 && ty >= 420 && ty <= 460) {
-        if (blinkEditField == 0) ssid = ssid;
-        else if (blinkEditField == 1) password = password;
-        saveWiFiToPreferences();
-        settingsUiState = 1;
-        editKeyboardActive = false;
-        editSelectedT9Cell = -1;
-        popupActiveEdit = false;
-        drawWiFiMenu();
-        return;
-      }
-      // Cancel button
-      if (tx >= 170 && tx <= 290 && ty >= 420 && ty <= 460) {
-        settingsUiState = 1;
-        editKeyboardActive = false;
-        editSelectedT9Cell = -1;
-        popupActiveEdit = false;
-        drawWiFiMenu();
-        return;
-      }
+      // // Save button
+      // if (tx >= 30 && tx <= 150 && ty >= 420 && ty <= 460) {
+      //   if (blinkEditField == 0) ssid = ssid;
+      //   else if (blinkEditField == 1) password = password;
+      //   saveWiFiToPreferences();
+      //   settingsUiState = 1;
+      //   editKeyboardActive = false;
+      //   editSelectedT9Cell = -1;
+      //   popupActiveEdit = false;
+      //   drawWiFiMenu();
+      //   return;
+      // }
+      // // Cancel button
+      // if (tx >= 170 && tx <= 290 && ty >= 420 && ty <= 460) {
+      //   settingsUiState = 1;
+      //   editKeyboardActive = false;
+      //   editSelectedT9Cell = -1;
+      //   popupActiveEdit = false;
+      //   drawWiFiMenu();
+      //   return;
+      // }
     }
     // Handle popup timeout
     if (popupActiveEdit && (millis() - popupStartTimeEdit > popupTimeoutEdit)) {

@@ -66,6 +66,7 @@ void reconnectWiFi();
 void loadConfig();
 void saveConfig();
 void sendStatus(Stream &out);
+void emergencyModeCheck();
 
 // Command buffers
 String wifiCmdBuffer = "";
@@ -133,29 +134,33 @@ int getBlinks(){
   }
  
 
-  if (!blinkProcessed) {
-    if (consecutiveBlinks == 1) {
+  if (!blinkProcessed){
+    if (consecutiveBlinks == 1 &&(millis() - lastBlinkEventTime > blinkGap)) {
       singleBlinkDetected = true;
       blinkProcessed = true;
       Serial.println("[DEBUG] Single blink detected and flagged.");
-    } else if (consecutiveBlinks == 2) {
+    } else if (consecutiveBlinks == 2&&(millis() - lastBlinkEventTime > blinkGap)) {
       doubleBlinkDetected = true;
       blinkProcessed = true;
       Serial.println("[DEBUG] Double blink detected and flagged.");
-    } else if (consecutiveBlinks >= 4 && !emergencyMode) {
+    } 
+   
+      if (consecutiveBlinks >= 4 && !emergencyMode && (millis() - lastBlinkEventTime > blinkGap)) {
       quadBlinkDetected = true;
       blinkProcessed = true;
       Serial.println("[DEBUG] Quad blink (emergency) detected and flagged.");
       emergencyMode = true;
       emergencyStartTime = millis();
       Serial.println("EMERGENCY MODE ACTIVATED!");
-    }
+
+      emergencyModeCheck(); // added emergency mode check
   }
-
-
-  
-  return consecutiveBlinks;
 }
+  return consecutiveBlinks;
+
+}
+
+
 
 void blinkWifiSetup() {
   Serial.println("inside the wifi setup...");
@@ -179,6 +184,39 @@ void blinkWifiSetup() {
   
 }
 
+void emergencyModeCheck() {
+  if (!emergencyMode) return;
+
+  Serial.println("emergencyModeCheck function");
+
+  while (emergencyMode) {
+    unsigned long elapsed = millis() - emergencyStartTime;
+
+    // 500ms ON, 500ms OFF
+    if ((elapsed % 1000) < 500) {
+      digitalWrite(EMERGENCY_LED_PIN, HIGH);
+      //tone(BUZZER_PIN, 3000); // 2kHz tone
+      digitalWrite(BUZZER_PIN, HIGH);
+    } else {
+      digitalWrite(EMERGENCY_LED_PIN, LOW);
+      //noTone(BUZZER_PIN);
+      digitalWrite(BUZZER_PIN, LOW);
+    }
+
+    // Emergency button clears the mode
+    if (digitalRead(EMERGENCY_BUTTON_PIN) == HIGH) {
+      emergencyMode = false;
+      digitalWrite(EMERGENCY_LED_PIN, LOW);
+      noTone(BUZZER_PIN);
+      Serial.println("EMERGENCY MODE CLEARED!");
+    }
+
+    delay(10);  // Prevent ESP32 watchdog reset
+  }
+}
+
+
+
 void blinkWifiLoop() {
   server.begin();
   if (clientConnected && singleBlinkDetected) {
@@ -191,36 +229,14 @@ void blinkWifiLoop() {
     // Send emergency notification
     sendNotificationRequest(userId, "EMERGENCY");
   }
-
-  // Emergency siren logic
-  if (emergencyMode) {
-    Serial.print("emergency if statement");
-    unsigned long elapsed = millis() - emergencyStartTime;
-    // Siren pattern: 500ms ON, 500ms OFF
-    if ((elapsed % 1000) < 500) {
-      digitalWrite(EMERGENCY_LED_PIN, HIGH);
-      digitalWrite(BUZZER_PIN, HIGH);
-    } else {
-      digitalWrite(EMERGENCY_LED_PIN, LOW);
-      digitalWrite(BUZZER_PIN, LOW);
-    }
-    // Emergency mode stays on until button is pressed
-    if (digitalRead(EMERGENCY_BUTTON_PIN) == HIGH) { // Button pressed (active low)
-      emergencyMode = false;
-      digitalWrite(BUZZER_PIN, LOW);
-      digitalWrite(EMERGENCY_LED_PIN, LOW);
-      Serial.println("EMERGENCY MODE CLEARED!");
-    }
-  } else {
-    digitalWrite(EMERGENCY_LED_PIN, LOW);
-    digitalWrite(BUZZER_PIN, LOW);
-  }
-  // No more emergency timeout logic
+  // added emergency 
+  emergencyModeCheck(); 
 
   // Handle new client connection
   if (!clientConnected) {
     client = server.available();
     if (client) {
+      loadConfig();
       clientConnected = true;
       // Send config string: minBlinkDuration;blinkInterval;ssid;password;userId (added userId)
       String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
