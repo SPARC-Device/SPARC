@@ -55,6 +55,8 @@ WiFiClient client;
 bool clientConnected = false;
 bool clientFound = false;  // Keep clientFound outside/static so it persists
 
+// Buffer for client commands
+static String clientCmdBuffer = "";
 
 // Configurable variables (moved from .ino)
 String ssid = "Pushpa";
@@ -257,10 +259,17 @@ void blinkWifiLoop() {
         if (clientConnected && client.available()) {
             while (client.available()) {
                 char c = client.read();
-                // You can buffer and process commands here if needed
                 Serial.print("Received from client: ");
                 Serial.println(c);
-                // TODO: Add command processing logic if needed
+                // Buffer until newline or carriage return
+                if (c == '\n' || c == '\r') {
+                    if (clientCmdBuffer.length() > 0) {
+                        processCommand(clientCmdBuffer, client, true);
+                        clientCmdBuffer = "";
+                    }
+                } else {
+                    clientCmdBuffer += c;
+                }
             }
         }
 

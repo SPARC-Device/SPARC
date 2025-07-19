@@ -21,6 +21,8 @@ IPAddress subnet(255, 255, 255, 0);
 void setup() {
   Serial.begin(115200);  
   loadWiFiFromPreferences();
+  loadBlinkSettingsFromPreferences();
+
   WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(ssid, password);
   
