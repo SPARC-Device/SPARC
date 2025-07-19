@@ -6,7 +6,7 @@
 #include "variable.h"
 
 int uiState = 0;
-bool tftConnected = true;
+bool tftConnected = false;
 
 void openSettingsInterface() {
     uiState = 1;
@@ -50,17 +50,24 @@ void loop() {
       gui3Loop();
 
       if (blinkWifiCheckSingleBlink()) {
-       // Serial.println("[DEBUG] Handling Single blink: calling gui3OnSingleBlink()");
+      // Serial.println("[DEBUG] Handling Single blink: calling gui3OnSingleBlink()");
         gui3OnSingleBlink();
-        } else if (blinkWifiCheckDoubleBlink()) {
+      } else if (blinkWifiCheckDoubleBlink()) {
         Serial.println("[DEBUG] Handling Double blink: calling gui3OnDoubleBlink()");
         gui3OnDoubleBlink();
       }
     } else if (uiState == 1) {
       setting2Loop();
     }
+    if (isServerAvailable()) {
+      tftConnected = false;
+    }
   } else {
     blinkWifiLoop();
+    if (!isServerAvailable()) {
+    
+      tftConnected = true;
+    }
   }
   blinkWifiResetFlags();
 }

@@ -50,8 +50,7 @@ static unsigned int lastBlinkEventTime = 0;
 Preferences prefs;
 
 // WiFi and TCP server
-
-WiFiServer server(33333);
+WiFiServer server(45454);
 WiFiClient client;
 bool clientConnected = false;
 
@@ -160,6 +159,9 @@ int getBlinks(){
 
 }
 
+bool isServerAvailable(){
+  return server.available();
+}
 
 
 void blinkWifiSetup() {
@@ -181,17 +183,19 @@ void blinkWifiSetup() {
   EEPROM.begin(EEPROM_SIZE); // Initialize EEPROM for userId only
   userId = readUserIdFromEEPROM();
  // reconnectWiFi();
+  server.begin();
+  Serial.println("Server started on port 45454");
   
 }
 
 void emergencyModeCheck() {
   if (!emergencyMode) return;
 
+  sendNotificationRequest(userId, "EMERGENCY");
+
   Serial.println("emergencyModeCheck function");
 
   while (emergencyMode) {
-    sendNotificationRequest(userId, "EMERGENCY");
-    emergencySent = true;
     unsigned long elapsed = millis() - emergencyStartTime;
 
     // 500ms ON, 500ms OFF
@@ -215,14 +219,13 @@ void emergencyModeCheck() {
 
     delay(10);  // Prevent ESP32 watchdog reset
   }
-
-  emergencySent = false;
 }
 
 
 
 void blinkWifiLoop() {
-  server.begin();
+  
+  Serial.println("inside wifi loop");
   if (clientConnected && singleBlinkDetected) {
     client.print('1');
   } else if (clientConnected && doubleBlinkDetected) {
@@ -233,19 +236,27 @@ void blinkWifiLoop() {
   }
   // added emergency 
   emergencyModeCheck(); 
-
+Serial.println("now checking for client connection");
   // Handle new client connection
   if (!clientConnected) {
-    client = server.available();
-    if (client) {
+    Serial.println("connecting to client");
+    WiFiClient tempClient = server.available();
+    if (tempClient && tempClient.connected()) {
+
+      client = tempClient;
+      Serial.println(client.connected());
+
       loadConfig();
       clientConnected = true;
-      // Send config string: minBlinkDuration;blinkInterval;ssid;password;userId (added userId)
+      Serial.println("client connected");
+
       String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
       client.print(config); // No newline
     }
+
   } else if (!client.connected()) {
     clientConnected = false;
+    Serial.print("client not connected");
     client.stop();
   }
 
