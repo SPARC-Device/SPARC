@@ -53,6 +53,8 @@ Preferences prefs;
 WiFiServer server(45454);
 WiFiClient client;
 bool clientConnected = false;
+static bool clientFound = false;  // Keep clientFound outside/static so it persists
+
 
 // Configurable variables (moved from .ino)
 String ssid = "Pushpa";
@@ -159,13 +161,13 @@ int getBlinks(){
 
 }
 
-bool isServerAvailable(){
-  return server.available();
+bool isServerAvailable(){  // bool 
+  return clientConnected;
 }
 
 
 void blinkWifiSetup() {
-  Serial.println("inside the wifi setup...");
+  Serial.println("*** INSIDE BLINK WIFI SETUP ***");
   
   pinMode(IR_SENSOR_PIN, INPUT);
   pinMode(BLINK_LED_PIN, OUTPUT);
@@ -177,14 +179,23 @@ void blinkWifiSetup() {
   digitalWrite(EMERGENCY_LED_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   // digitalWrite(NAVIGATION_LED_PIN, LOW); // Removed navigation LED
+  Serial.println("*** ALL PINS INITIALIZED ***");
 
   // WiFi/Preferences setup
+  Serial.println("*** INITIALIZING PREFERENCES ***");
   prefs.begin("blinkcfg", false);
+  Serial.println("*** INITIALIZING EEPROM ***");
   EEPROM.begin(EEPROM_SIZE); // Initialize EEPROM for userId only
+  Serial.println("*** READING USER ID FROM EEPROM ***");
   userId = readUserIdFromEEPROM();
- // reconnectWiFi();
+  Serial.print("*** USER ID READ: ");
+  Serial.print(userId);
+  Serial.println(" ***");
+  Serial.println("*** RECONNECTING TO WIFI ***");
+  reconnectWiFi();
+  Serial.println("*** STARTING SERVER ON PORT 45454 ***");
   server.begin();
-  Serial.println("Server started on port 45454");
+  Serial.println("*** SERVER STARTED SUCCESSFULLY ON PORT 45454 ***");
   
 }
 
@@ -224,70 +235,130 @@ void emergencyModeCheck() {
 
 
 void blinkWifiLoop() {
-  
-  Serial.println("inside wifi loop");
-  if (clientConnected && singleBlinkDetected) {
-    client.print('1');
-  } else if (clientConnected && doubleBlinkDetected) {
-    client.print('2');
-  } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
-    client.print('4');
-
-  }
-  // added emergency 
-  emergencyModeCheck(); 
-Serial.println("now checking for client connection");
-  // Handle new client connection
-  if (!clientConnected) {
-    Serial.println("connecting to client");
-    WiFiClient tempClient = server.available();
-    if (tempClient && tempClient.connected()) {
-
-      client = tempClient;
-      Serial.println(client.connected());
-
-      loadConfig();
-      clientConnected = true;
-      Serial.println("client connected");
-
-      String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
-      client.print(config); // No newline
-    }
-
-  } else if (!client.connected()) {
-    clientConnected = false;
-    Serial.print("client not connected");
-    client.stop();
-  }
-
-  // Handle Serial commands
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\n' || c == '\r') {
-      if (serialCmdBuffer.length() > 0) {
-        processCommand(serialCmdBuffer, Serial, false);
-        serialCmdBuffer = "";
-      }
-    } else {
-      serialCmdBuffer += c;
-    }
-  }
-
-  // Handle TCP client commands
-  if (clientConnected && client.connected()) {
-    while (client.available()) {
-      char c = client.read();
-      if (c == '\n' || c == '\r') {
-        if (wifiCmdBuffer.length() > 0) {
-          processCommand(wifiCmdBuffer, client, true);
-          wifiCmdBuffer = "";
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        // Only do the 5-second wait if we haven't found a client yet
+        if (!clientFound && !clientConnected) {
+            Serial.println("*** WAITING 5 SECONDS FOR CLIENT CONNECTIONS ***");
+            unsigned long waitStart = millis();
+            
+            while (millis() - waitStart < 5000 && !clientFound) {
+                Serial.println("*** CHECKING FOR AVAILABLE CLIENT ***");
+                WiFiClient tempClient = server.available();
+                
+                if (tempClient) {
+                    Serial.println("*** SERVER.AVAILABLE() RETURNED A CLIENT! ***");
+                    Serial.print("Client valid: ");
+                    Serial.println(tempClient ? "YES" : "NO");
+                    Serial.print("Client connected(): ");
+                    Serial.println(tempClient.connected());
+                    Serial.print("Client available(): ");
+                    Serial.println(tempClient.available());
+                    
+                    // Accept the client regardless of connected() status
+                    client = tempClient;
+                    Serial.println("Client assigned to global variable");
+                    
+                    // ADD THIS DELAY - Give client time to be ready
+                    Serial.println("*** WAITING 500ms FOR CLIENT TO BE READY ***");
+                    delay(500);  // 500ms delay
+                    Serial.println("*** DELAY COMPLETED ***");
+                    
+                    Serial.print("Global client connected(): ");
+                    Serial.println(client.connected());
+                    Serial.print("Global client available(): ");
+                    Serial.println(client.available());
+                    
+                    loadConfig();
+                    Serial.println("Config loaded");
+                    
+                    clientConnected = true;
+                    clientFound = true;
+                    Serial.println("*** CLIENT CONNECTED FLAG SET TO TRUE ***");
+                    
+                    String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
+                    Serial.print("Config string to send: '");
+                    Serial.print(config);
+                    Serial.println("'");
+                    Serial.print("Config string length: ");
+                    Serial.println(config.length());
+                    
+                    Serial.println("*** ATTEMPTING TO SEND CONFIG DATA ***");
+                    size_t bytesWritten = client.print(config);
+                    Serial.print("Bytes written to client: ");
+                    Serial.println(bytesWritten);
+                    
+                    if (bytesWritten > 0) {
+                        Serial.println("*** CONFIG SENT SUCCESSFULLY! ***");
+                    } else {
+                        Serial.println("*** ERROR: NO BYTES WRITTEN! ***");
+                        Serial.print("Client still connected: ");
+                        Serial.println(client.connected());
+                        Serial.print("Client available: ");
+                        Serial.println(client.available());
+                    }
+                    
+                    // Try to flush the data
+                    Serial.println("*** FLUSHING CLIENT BUFFER ***");
+                    client.flush();
+                    Serial.println("Client buffer flushed");
+                    Serial.println("*** CLIENT CONNECTED! ***");
+                    
+                    break; // Exit the wait loop
+                } else {
+                    Serial.println("*** NO CLIENT AVAILABLE YET ***");
+                }
+                delay(100); // Small delay to prevent busy waiting
+            }
+            
+            if (!clientFound) {
+                Serial.println("*** 5-SECOND WAIT PERIOD COMPLETED - NO CLIENT CONNECTED ***");
+            }
         }
-      } else {
-        wifiCmdBuffer += c;
-      }
+        
+        // Continue with rest of your WiFi loop code...
+        Serial.println("*** INSIDE MAIN WIFI LOOP ***");
+        
+        if (clientConnected && singleBlinkDetected) {
+            Serial.println("*** SENDING SINGLE BLINK TO CLIENT ***");
+            client.print('1');
+        } else if (clientConnected && doubleBlinkDetected) {
+            Serial.println("*** SENDING DOUBLE BLINK TO CLIENT ***");
+            client.print('2');
+        } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
+            Serial.println("*** SENDING QUAD BLINK TO CLIENT ***");
+            client.print('4');
+        }
+        
+        // added emergency 
+        emergencyModeCheck(); 
+        Serial.println("*** CHECKING FOR CLIENT CONNECTION STATUS ***");
+        
+        // Handle new client connection (only if we haven't found one yet)
+        if (!clientConnected && !clientFound) {
+            Serial.println("=== CHECKING FOR NEW CLIENT ===");
+            WiFiClient tempClient = server.available();
+            
+            if (tempClient) {
+                // Same client handling code as above - you could extract this to a separate function
+                Serial.println("*** SERVER.AVAILABLE() RETURNED A CLIENT! ***");
+                // ... (same client handling code)
+                clientFound = true;
+                clientConnected = true;
+            } else {
+                // Only print this occasionally to avoid spam
+                static unsigned long lastNoClientMsg = 0;
+                if (millis() - lastNoClientMsg > 5000) {  // Every 5 seconds
+                    Serial.println("*** NO CLIENT AVAILABLE ***");
+                    lastNoClientMsg = millis();
+                }
+            }
+        }
+    } else {
+        Serial.println("*** WIFI NOT CONNECTED - CANNOT HANDLE CLIENTS ***");
     }
-  }
 }
+
 
 bool blinkWifiCheckSingleBlink() {
   if (singleBlinkDetected) {

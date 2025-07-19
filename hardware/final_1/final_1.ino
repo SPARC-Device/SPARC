@@ -40,6 +40,7 @@ void setup() {
   notificationServerSetup();
   blinkWifiSetup();
   gui3Setup();
+  //gui3InitAudio(); 
 }
 
 void loop() {
@@ -65,7 +66,6 @@ void loop() {
   } else {
     blinkWifiLoop();
     if (!isServerAvailable()) {
-    
       tftConnected = true;
     }
   }
