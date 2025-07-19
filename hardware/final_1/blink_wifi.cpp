@@ -248,7 +248,7 @@ void blinkWifiLoop() {
         } else if (clientConnected && doubleBlinkDetected) {
             Serial.println("*** SENDING DOUBLE BLINK TO CLIENT ***");
             client.print('2');
-        } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
+        } else if (clientConnected && quadBlinkDetected && emergencyMode) {
             Serial.println("*** SENDING QUAD BLINK TO CLIENT ***");
             client.print('4');
         }
