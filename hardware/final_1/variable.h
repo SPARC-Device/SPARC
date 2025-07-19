@@ -17,6 +17,4 @@ extern IPAddress gateway;
 extern IPAddress subnet;
 
 
-
-
 #endif

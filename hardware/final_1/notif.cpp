@@ -9,25 +9,32 @@ WiFiClient notificationClient;
 bool notificationClientConnected = false;
 IPAddress notificationServerIP;
 
+bool notificationServerIPCaptured = false;
+
 void notificationServerSetup() {
     notificationServer.begin();
 }
 
 void notificationServerLoop() {
-    if (!notificationClientConnected) {
-        notificationClient = notificationServer.available();
-        if (notificationClient) {
-            notificationClientConnected = true;
-            notificationServerIP = notificationClient.remoteIP();
-            Serial.print("Notification server connected: ");
-            Serial.println(notificationServerIP);
-        }
-    } else if (!notificationClient.connected()) {
-        notificationClientConnected = false;
-        notificationClient.stop();
-        Serial.println("Notification server disconnected.");
+    if (!notificationServerIPCaptured) {
+      WiFiClient tempClient = notificationServer.available();
+      if (tempClient) {
+        notificationServerIP = tempClient.remoteIP();
+        notificationServerIPCaptured = true;
+  
+        Serial.print("Captured notification server IP: ");
+        Serial.println(notificationServerIP);
+  
+        // Send acknowledgment (optional)
+        tempClient.println("ESP32 received your connection.");
+        delay(100); // ensure data is sent before closing
+        tempClient.stop();
+  
+        Serial.println("Closed initial connection.");
+      }
     }
-}
+  }
+  
 
 void sendNotificationRequest(const String& userId, const String& type) {
     if (!notificationClientConnected) {

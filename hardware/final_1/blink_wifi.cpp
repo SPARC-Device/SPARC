@@ -190,6 +190,8 @@ void emergencyModeCheck() {
   Serial.println("emergencyModeCheck function");
 
   while (emergencyMode) {
+    sendNotificationRequest(userId, "EMERGENCY");
+    emergencySent = true;
     unsigned long elapsed = millis() - emergencyStartTime;
 
     // 500ms ON, 500ms OFF
@@ -207,12 +209,14 @@ void emergencyModeCheck() {
     if (digitalRead(EMERGENCY_BUTTON_PIN) == HIGH) {
       emergencyMode = false;
       digitalWrite(EMERGENCY_LED_PIN, LOW);
-      noTone(BUZZER_PIN);
+      digitalWrite(BUZZER_PIN, LOW);
       Serial.println("EMERGENCY MODE CLEARED!");
     }
 
     delay(10);  // Prevent ESP32 watchdog reset
   }
+
+  emergencySent = false;
 }
 
 
@@ -226,8 +230,6 @@ void blinkWifiLoop() {
   } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
     client.print('4');
 
-    // Send emergency notification
-    sendNotificationRequest(userId, "EMERGENCY");
   }
   // added emergency 
   emergencyModeCheck(); 
