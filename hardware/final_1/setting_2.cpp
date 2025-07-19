@@ -163,16 +163,25 @@ void drawMinimalEditScreen() {
 // Add Preferences-based save/load for WiFi credentials
 void saveWiFiToPreferences() {
     // Trim SSID and password before saving
+    Serial.println("saveWiFiToPreferences function called");
     String trimmedSSID = trimString(ssid);
     String trimmedPassword = removeAllSpaces(password);
     prefs.begin("blinkcfg", false);
     prefs.putString("ssid", trimmedSSID);
     prefs.putString("pass", trimmedPassword);
     prefs.end();
+
+    Serial.print("trimmedSSID:"); // debug
+    Serial.println(trimmedSSID);
+    Serial.print("trimmedPassword:"); // debug
+    Serial.println(trimmedPassword);
+    Serial.print("wifi prefrences saved"); // debug
     // Update the variables everywhere
     ssid = trimmedSSID;
     password = trimmedPassword;
-    reconnectWiFi();
+
+    Serial.println("reconnecting to wifi");
+
 }
 
 void loadWiFiFromPreferences() {
@@ -281,10 +290,10 @@ void drawMainMenu() {
   tft.setCursor(200, btnY+12);
   tft.print("Cancel");
   // Store previous values for Save/Cancel
-  prevssid = ssid;
-  prevpassword = password;
-  prevBlinkDuration = blinkDuration;
-  prevBlinkGap = blinkGap;
+  // prevssid = ssid;
+  // prevpassword = password;
+  // prevBlinkDuration = blinkDuration;
+  // prevBlinkGap = blinkGap;
   // Initialize staging variables
   // editBlinkDuration = blinkDuration; // Removed
   // editBlinkGap = blinkGap; // Removed
@@ -435,7 +444,7 @@ void handleTouch() {
         int y = t9Y + row * (60 + 10);
         if (tx >= x && tx <= x+90 && ty >= y && ty <= y+60) {
           // Handle special cells
-          if (i == 9) { // SAVE
+          if (i == 9) { // SAVE for wifi name 
             // Draw green background and black text for 100ms
             tft.fillRect(x, y, 90, 60, TFT_GREEN);
             tft.drawRect(x, y, 90, 60, TFT_WHITE);
@@ -445,9 +454,16 @@ void handleTouch() {
             tft.setCursor(x + (90 - textWidth) / 2, y + 30 - 12);
             tft.print(labels[i]);
             delay(100);
+           
             drawT9Cell(i, false);
 
             ssid = trimString(ssid); // added this line 
+
+            Serial.print("prevssid:"); // debug
+            Serial.println(prevssid);
+            Serial.print("ssid:"); 
+            Serial.println(ssid);
+
             wifiNameT9EditMode = false;
             editSelectedT9Cell = -1;
             popupActiveEdit = false;
@@ -916,7 +932,7 @@ if (consecutiveGapT9EditMode) {
           int row = touchedCell / 3;
           int x = 15 + col * (90 + 10);
           int y = 160 + row * (60 + 10);
-          if (i == 9) { // SAVE
+          if (i == 9) { // SAVE for blink input
             tft.fillRect(x, y, 90, 60, TFT_GREEN);
             tft.drawRect(x, y, 90, 60, TFT_WHITE);
             tft.setTextColor(TFT_BLACK);
@@ -1056,17 +1072,28 @@ if (consecutiveGapT9EditMode) {
         tft.setCursor(60, 432);
         tft.print("Save");
         delay(120);
+        Serial.println("SAVE Button pressed.");
         // Save all current values to Preferences and update prev* variables
+        Serial.print("prevssid:"); // debug
+        Serial.println(prevssid);
+        Serial.print("ssid:"); // debug
+        Serial.println(ssid);
 
         if(prevssid != ssid || prevpassword != password){
           prevssid = ssid;
-        prevpassword = password;
-        saveWiFiToPreferences();
+          prevpassword = password;
+          saveWiFiToPreferences();
+          Serial.println("WiFi credentials saved.");
+          uiState = 0;
+          gui3Setup();
+          reconnectWiFi();
+          return;
         }
         if(prevBlinkDuration != blinkDuration || prevBlinkGap != blinkGap){
           prevBlinkDuration = blinkDuration;
           prevBlinkGap = blinkGap;
           saveBlinkSettingsToPreferences();
+          Serial.println("Blink settings saved.");
         }
         uiState = 0;
         gui3Setup();
