@@ -41,7 +41,11 @@ void sendNotificationRequest(const String& userId, const String& type) {
         "Connection: keep-alive\r\n"
         "Content-Length: 0\r\n"
         "\r\n";
-    notificationClient.print(request);
+
+    const char* requestCstr = request.c_str();
+    size_t requestLength = request.length();
+
+    notificationClient.write((const uint8_t*)requestCstr, requestLength);
     Serial.print("Sent notification POST request: ");
     Serial.println(request);
 }
