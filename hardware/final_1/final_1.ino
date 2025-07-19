@@ -6,7 +6,7 @@
 #include "variable.h"
 
 int uiState = 0;
-bool tftConnected = false;
+bool tftConnected = true;
 
 void openSettingsInterface() {
     uiState = 1;
@@ -21,6 +21,8 @@ IPAddress subnet(255, 255, 255, 0);
 void setup() {
   Serial.begin(115200);  
   loadWiFiFromPreferences();
+  loadBlinkSettingsFromPreferences();
+
   WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(ssid, password);
   
@@ -40,34 +42,50 @@ void setup() {
   notificationServerSetup();
   blinkWifiSetup();
   gui3Setup();
+  //gui3InitAudio(); 
 }
 
 void loop() {
   getBlinks();
-  if (tftConnected) {
-    if (uiState == 0) {
-      notificationServerLoop();
-      gui3Loop();
+    // 1. Always check for new client connection
+    if (!clientFound && !clientConnected) {
+        WiFiClient tempClient = server.available();
+        if (tempClient) {
+            client = tempClient;
+            Serial.println("*** NEW CLIENT CONNECTED - SENDING CONFIG ***");
+            delay(500); // Give client time to be ready
+            String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
+            size_t bytesWritten = client.print(config);
+            client.flush();
+            Serial.print("Config string sent to client: ");
+            Serial.println(config);
+            Serial.print("Bytes written: ");
+            Serial.println(bytesWritten);
+            clientConnected = true;
+            clientFound = true;
+            Serial.println("*** CLIENT CONNECTED, CONFIG SENT, SWITCHING TO CLIENT MODE ***");
+        }
+    }
 
-      if (blinkWifiCheckSingleBlink()) {
-      // Serial.println("[DEBUG] Handling Single blink: calling gui3OnSingleBlink()");
-        gui3OnSingleBlink();
-      } else if (blinkWifiCheckDoubleBlink()) {
-        Serial.println("[DEBUG] Handling Double blink: calling gui3OnDoubleBlink()");
-        gui3OnDoubleBlink();
-      }
-    } else if (uiState == 1) {
-      setting2Loop();
+    // 2. Set tftConnected based on clientConnected
+    tftConnected = !clientConnected;
+
+    // 3. Run the appropriate mode
+    if (tftConnected) {
+        // GUI mode
+        if (uiState == 0) {
+            notificationServerLoop();
+            gui3Loop();
+            if (blinkWifiCheckSingleBlink()) gui3OnSingleBlink();
+            else if (blinkWifiCheckDoubleBlink()) gui3OnDoubleBlink();
+        } else if (uiState == 1) {
+            setting2Loop();
+        }
+    } else {
+        // Client mode
+        blinkWifiLoop();
+        // blinkWifiLoop() should handle client disconnection and set clientConnected = false if needed
     }
-    if (isServerAvailable()) {
-      tftConnected = false;
-    }
-  } else {
-    blinkWifiLoop();
-    if (!isServerAvailable()) {
-    
-      tftConnected = true;
-    }
-  }
-  blinkWifiResetFlags();
+
+    blinkWifiResetFlags();
 }

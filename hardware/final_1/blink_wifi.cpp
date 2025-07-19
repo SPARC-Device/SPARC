@@ -53,6 +53,10 @@ Preferences prefs;
 WiFiServer server(45454);
 WiFiClient client;
 bool clientConnected = false;
+bool clientFound = false;  // Keep clientFound outside/static so it persists
+
+// Buffer for client commands
+static String clientCmdBuffer = "";
 
 // Configurable variables (moved from .ino)
 String ssid = "Pushpa";
@@ -159,13 +163,13 @@ int getBlinks(){
 
 }
 
-bool isServerAvailable(){
-  return server.available();
+bool isServerAvailable(){  // bool 
+  return clientConnected;
 }
 
 
 void blinkWifiSetup() {
-  Serial.println("inside the wifi setup...");
+  Serial.println("*** INSIDE BLINK WIFI SETUP ***");
   
   pinMode(IR_SENSOR_PIN, INPUT);
   pinMode(BLINK_LED_PIN, OUTPUT);
@@ -177,14 +181,23 @@ void blinkWifiSetup() {
   digitalWrite(EMERGENCY_LED_PIN, LOW);
   digitalWrite(BUZZER_PIN, LOW);
   // digitalWrite(NAVIGATION_LED_PIN, LOW); // Removed navigation LED
+  Serial.println("*** ALL PINS INITIALIZED ***");
 
   // WiFi/Preferences setup
+  Serial.println("*** INITIALIZING PREFERENCES ***");
   prefs.begin("blinkcfg", false);
+  Serial.println("*** INITIALIZING EEPROM ***");
   EEPROM.begin(EEPROM_SIZE); // Initialize EEPROM for userId only
+  Serial.println("*** READING USER ID FROM EEPROM ***");
   userId = readUserIdFromEEPROM();
- // reconnectWiFi();
+  Serial.print("*** USER ID READ: ");
+  Serial.print(userId);
+  Serial.println(" ***");
+  Serial.println("*** RECONNECTING TO WIFI ***");
+  reconnectWiFi();
+  Serial.println("*** STARTING SERVER ON PORT 45454 ***");
   server.begin();
-  Serial.println("Server started on port 45454");
+  Serial.println("*** SERVER STARTED SUCCESSFULLY ON PORT 45454 ***");
   
 }
 
@@ -224,70 +237,58 @@ void emergencyModeCheck() {
 
 
 void blinkWifiLoop() {
-  
-  Serial.println("inside wifi loop");
-  if (clientConnected && singleBlinkDetected) {
-    client.print('1');
-  } else if (clientConnected && doubleBlinkDetected) {
-    client.print('2');
-  } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
-    client.print('4');
+    if (WiFi.status() == WL_CONNECTED) {
+        // --- Ongoing communication with connected client ---
+       // Serial.println("*** INSIDE MAIN WIFI LOOP (CLIENT MODE) ***");
 
-  }
-  // added emergency 
-  emergencyModeCheck(); 
-Serial.println("now checking for client connection");
-  // Handle new client connection
-  if (!clientConnected) {
-    Serial.println("connecting to client");
-    WiFiClient tempClient = server.available();
-    if (tempClient && tempClient.connected()) {
-
-      client = tempClient;
-      Serial.println(client.connected());
-
-      loadConfig();
-      clientConnected = true;
-      Serial.println("client connected");
-
-      String config = String(blinkDuration) + ";" + String(blinkGap) + ";" + ssid + ";" + password + ";" + userId;
-      client.print(config); // No newline
-    }
-
-  } else if (!client.connected()) {
-    clientConnected = false;
-    Serial.print("client not connected");
-    client.stop();
-  }
-
-  // Handle Serial commands
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\n' || c == '\r') {
-      if (serialCmdBuffer.length() > 0) {
-        processCommand(serialCmdBuffer, Serial, false);
-        serialCmdBuffer = "";
-      }
-    } else {
-      serialCmdBuffer += c;
-    }
-  }
-
-  // Handle TCP client commands
-  if (clientConnected && client.connected()) {
-    while (client.available()) {
-      char c = client.read();
-      if (c == '\n' || c == '\r') {
-        if (wifiCmdBuffer.length() > 0) {
-          processCommand(wifiCmdBuffer, client, true);
-          wifiCmdBuffer = "";
+        // Send blink data to client
+        if (clientConnected && singleBlinkDetected) {
+            Serial.println("*** SENDING SINGLE BLINK TO CLIENT ***");
+            client.print('1');
+        } else if (clientConnected && doubleBlinkDetected) {
+            Serial.println("*** SENDING DOUBLE BLINK TO CLIENT ***");
+            client.print('2');
+        } else if (clientConnected && quadBlinkDetected && !emergencyMode) {
+            Serial.println("*** SENDING QUAD BLINK TO CLIENT ***");
+            client.print('4');
         }
-      } else {
-        wifiCmdBuffer += c;
-      }
+
+        // Handle emergency mode
+        emergencyModeCheck();
+        // Process incoming commands from client (if any)
+        if (clientConnected && client.available()) {
+            while (client.available()) {
+                char c = client.read();
+                Serial.print("Received from client: ");
+                Serial.println(c);
+                // Buffer until newline or carriage return
+                if (c == '\n' || c == '\r') {
+                    if (clientCmdBuffer.length() > 0) {
+                        processCommand(clientCmdBuffer, client, true);
+                        clientCmdBuffer = "";
+                    }
+                } else {
+                    clientCmdBuffer += c;
+                }
+            }
+        }
+
+        
+       // Serial.println("*** CHECKING FOR CLIENT CONNECTION STATUS ***");
+
+        // Check if client is still connected
+        if (clientConnected && !client.connected()) {
+            Serial.println("*** CLIENT DISCONNECTED - RESETTING FLAGS ***");
+            clientConnected = false;
+            clientFound = false;
+            client.stop();
+            Serial.println("*** CLIENT STOPPED AND FLAGS RESET ***");
+        }
+    } else {
+        Serial.println("*** WIFI NOT CONNECTED - CANNOT HANDLE CLIENTS ***");
     }
-  }
 }
+
 
 bool blinkWifiCheckSingleBlink() {
   if (singleBlinkDetected) {
@@ -321,6 +322,7 @@ void processCommand(String cmd, Stream &out, bool fromWifi) {
   cmd.trim();
   cmd.toUpperCase();
   
+  Serial.println("Processing command: " + cmd);
    if (cmd.startsWith("SET_MINBLINK:")) {
     String val = cmd.substring(13);
     unsigned long v = val.toInt();

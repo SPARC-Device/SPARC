@@ -4,7 +4,28 @@
 #include <TFT_eSPI.h>
 #include "notif.h" // Add this include
 #include "variable.h"
+#include <DFRobotDFPlayerMini.h>
+#include <HardwareSerial.h>
 
+// HardwareSerial myDFSerial(2);  // Use UART2 (pins 16, 17)
+// DFRobotDFPlayerMini myDFPlayer;
+
+// void gui3InitAudio() {
+//     Serial.println("*** INITIALIZING DFPLAYER AUDIO MODULE ***");
+//     myDFSerial.begin(9600, SERIAL_8N1, 16, 17);
+//     Serial.println("*** DFPLAYER SERIAL PORT INITIALIZED ***");
+//     delay(1000);
+    
+//     if (!myDFPlayer.begin(myDFSerial)) {
+//         Serial.println("*** ERROR: DFPlayer Mini not detected! ***");
+//         Serial.println("*** CHECK WIRING: TX->16, RX->17, VCC->5V, GND->GND ***");
+//         // Don't use while(1) - just continue without audio
+//         return;
+//     }
+    
+//     myDFPlayer.volume(30);
+//     Serial.println("*** DFPLAYER READY - AUDIO MODULE INITIALIZED SUCCESSFULLY ***");
+// }
 
 extern void openSettingsInterface();
 // --- Static variables for T9 state and UI ---
@@ -17,9 +38,9 @@ static int cursorX = 0; // Global cursor X position
 
 // T9 layout and state
 static const char* labels[12] = {
-  "1 ABC", "2 DEF", "3 GHI",
-  "4 JKL", "5 MNO", "6 PQR",
-  "7 STU", "8 VWX", "9 YZ.",
+  "ABC 1", "DEF 2", "GHI 3",
+  "JKL 4", "MNO 5", "PQR 6",
+  "STU 7", "VWX 8", "YZ. 9",
   "", "0 _<-", ""
 };
 static int selectedCell = 0; // 0-11
@@ -57,8 +78,12 @@ void gui3Setup() {
     drawMessageBox();
     drawT9Grid();
     highlightCell(selectedCell);
-}
 
+   // gui3InitAudio();
+}
+// void playSound(int track){
+//     myDFPlayer.play(track);
+// }
 // --- Main loop: handles periodic tasks (should be called in Arduino loop) ---
 void gui3Loop() {
     gui3CheckPopupTimeout();
@@ -75,6 +100,8 @@ void gui3Loop() {
         }
         lastCursorBlink = millis();
     }
+
+    
     // --- Touch handling for settings cell (index 11) ---
     uint16_t x, y;
     if (tft.getTouch(&x, &y)) {
@@ -86,10 +113,45 @@ void gui3Loop() {
         int cellW = 90;
         int cellH = 60;
         if (x >= cellX && x < cellX + cellW && y >= cellY && y < cellY + cellH) {
+          //  playSound(52);
             openSettingsInterface();
         }
     }
 }
+
+// void speakCharacter(String c) {
+//     int track = 0;
+
+//     if (c.length() == 1 && isAlpha(c[0])) {
+//         track = (toupper(c[0]) - 'A') + 1;         // 001–026
+//     } 
+//     else if (c.length() == 1 && isDigit(c[0])) {
+//         track = (c[0] - '0') + 33;                // 033–042
+//     }
+//     else if (c == "_") {
+//         track = 27;  // space
+//     }
+//     else if (c == "<") {
+//         track = 28;  // backspace
+//     }
+//     else if (c == ".") {
+//         track = 29;  // message cleared
+//     }
+//     else if (c == "toilet") {
+//         track = 30;
+//     }
+//     else if (c == "food") {
+//         track = 31;
+//     }
+//     else if (c == "doctor") {
+//         track = 32;
+//     }
+
+//     if (track > 0) {
+//         myDFPlayer.play(track);
+//     }
+// }
+
 
 // --- Blink event: single blink ---
 void gui3OnSingleBlink() {
@@ -100,12 +162,14 @@ void gui3OnSingleBlink() {
         popupIndex = (popupIndex + 1) % popupCount;
         drawPopup(); // redraw all, only one is navy blue
         popupStartTime = millis(); // reset timer
+      //  playSound(50);
     } else if (!popupActive) {
         // Move to next cell (cyclic)
         int prevCell = selectedCell;
         selectedCell = (selectedCell + 1) % 12;
         drawButton(prevCell, false, false); // white border
         highlightCell(selectedCell); // yellow border
+      //  playSound(50);
     }
 }
 
@@ -121,11 +185,13 @@ void gui3OnDoubleBlink() {
         popupIndex = 0;
         drawPopup();
         popupStartTime = millis();
+       // playSound(51);
     } else if (popupActive && popupSelecting) {
         // Double blink in popup: select current popup button, add to message bar, clear popup
         drawPopupSelection(popupIndex); // green highlight
         delay(150); // brief visual feedback
         String sel = lastPopupChars[popupIndex];
+       
         if (sel == "<") {
             if (typedMessage.length()) typedMessage.remove(typedMessage.length() - 1);
         } else if (sel == "_") {
@@ -141,8 +207,11 @@ void gui3OnDoubleBlink() {
             typedMessage = "";
           } else {
             typedMessage += sel;
+            
         }
         drawMessageBox();
+      //  speakCharacter(sel);
+      //  playSound(51);
         clearPopupText();
         drawButton(selectedCell, false, false); // white border
         highlightCell(selectedCell);

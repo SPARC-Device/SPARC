@@ -181,7 +181,6 @@ void saveWiFiToPreferences() {
     password = trimmedPassword;
 
     Serial.println("reconnecting to wifi");
-
 }
 
 void loadWiFiFromPreferences() {

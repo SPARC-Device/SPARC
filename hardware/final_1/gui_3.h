@@ -11,5 +11,6 @@ void gui3OnSingleBlink();
 void gui3OnDoubleBlink();
 // Should be called periodically to handle popup timeout
 void gui3CheckPopupTimeout();
+void gui3InitAudio(); 
 
 #endif // GUI_3_H 
