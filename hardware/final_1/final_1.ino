@@ -42,7 +42,7 @@ void setup() {
   notificationServerSetup();
   blinkWifiSetup();
   gui3Setup();
-  //gui3InitAudio(); 
+  gui3InitAudio(); 
 }
 
 void loop() {
