@@ -7,25 +7,30 @@
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
-// HardwareSerial myDFSerial(2);  // Use UART2 (pins 16, 17)
-// DFRobotDFPlayerMini myDFPlayer;
+HardwareSerial myDFSerial(2);  // Use UART2 (pins 16, 17)
+DFRobotDFPlayerMini myDFPlayer;
 
-// void gui3InitAudio() {
-//     Serial.println("*** INITIALIZING DFPLAYER AUDIO MODULE ***");
-//     myDFSerial.begin(9600, SERIAL_8N1, 16, 17);
-//     Serial.println("*** DFPLAYER SERIAL PORT INITIALIZED ***");
-//     delay(1000);
+void gui3InitAudio() {
+    Serial.println("*** INITIALIZING DFPLAYER AUDIO MODULE ***");
+    myDFSerial.begin(9600, SERIAL_8N1, 16, 17);
+    Serial.println("*** DFPLAYER SERIAL PORT INITIALIZED ***");
+    delay(500);
     
-//     if (!myDFPlayer.begin(myDFSerial)) {
-//         Serial.println("*** ERROR: DFPlayer Mini not detected! ***");
-//         Serial.println("*** CHECK WIRING: TX->16, RX->17, VCC->5V, GND->GND ***");
-//         // Don't use while(1) - just continue without audio
-//         return;
-//     }
+    if (!myDFPlayer.begin(myDFSerial)) {
+        Serial.println("*** ERROR: DFPlayer Mini not detected! ***");
+        Serial.println("*** CHECK WIRING: TX->16, RX->17, VCC->5V, GND->GND ***");
+        // Don't use while(1) - just continue without audio
+        return;
+    }
     
-//     myDFPlayer.volume(30);
-//     Serial.println("*** DFPLAYER READY - AUDIO MODULE INITIALIZED SUCCESSFULLY ***");
-// }
+    myDFPlayer.volume(30);
+    Serial.println("*** DFPLAYER READY - AUDIO MODULE INITIALIZED SUCCESSFULLY ***");
+    Serial.println("*** PLAYING GUI STARTUP SOUND ***");
+    myDFPlayer.play(46); // Using track 46 for startup sound
+    delay(27000); // Wait for startup sound to play
+    myDFPlayer.play(47); // Using track 46 for startup sound
+    delay(1000); // Wait for startup sound to play
+}
 
 extern void openSettingsInterface();
 // --- Static variables for T9 state and UI ---
@@ -81,9 +86,30 @@ void gui3Setup() {
 
    // gui3InitAudio();
 }
-// void playSound(int track){
-//     myDFPlayer.play(track);
-// }
+void playSound(int track){
+    Serial.print("[DFPlayer] playSound: Playing track ");
+    Serial.print(track);
+    Serial.print(" (audio: ");
+    switch(track) {
+        case 27: Serial.print("space"); break;
+        case 28: Serial.print("backspace"); break;
+        case 29: Serial.print("message cleared"); break;
+        case 30: Serial.print("toilet"); break;
+        case 31: Serial.print("food"); break;
+        case 32: Serial.print("doctor"); break;
+        default:
+            if (track >= 1 && track <= 26) {
+                Serial.print("letter "); Serial.print((char)('A' + track - 1));
+            } else if (track >= 33 && track <= 42) {
+                Serial.print("number "); Serial.print(track - 33);
+            } else {
+                Serial.print("unknown");
+            }
+    }
+    Serial.println(")");
+    myDFPlayer.play(track);
+    
+}
 // --- Main loop: handles periodic tasks (should be called in Arduino loop) ---
 void gui3Loop() {
     gui3CheckPopupTimeout();
@@ -113,44 +139,66 @@ void gui3Loop() {
         int cellW = 90;
         int cellH = 60;
         if (x >= cellX && x < cellX + cellW && y >= cellY && y < cellY + cellH) {
-          //  playSound(52);
+            playSound(45);
             openSettingsInterface();
         }
     }
 }
 
-// void speakCharacter(String c) {
-//     int track = 0;
+void speakCharacter(String c) {
+    int track = 0;
+    Serial.print("[DFPlayer] speakCharacter called with: ");
+    Serial.println(c);
 
-//     if (c.length() == 1 && isAlpha(c[0])) {
-//         track = (toupper(c[0]) - 'A') + 1;         // 001–026
-//     } 
-//     else if (c.length() == 1 && isDigit(c[0])) {
-//         track = (c[0] - '0') + 33;                // 033–042
-//     }
-//     else if (c == "_") {
-//         track = 27;  // space
-//     }
-//     else if (c == "<") {
-//         track = 28;  // backspace
-//     }
-//     else if (c == ".") {
-//         track = 29;  // message cleared
-//     }
-//     else if (c == "toilet") {
-//         track = 30;
-//     }
-//     else if (c == "food") {
-//         track = 31;
-//     }
-//     else if (c == "doctor") {
-//         track = 32;
-//     }
+    if (c.length() == 1 && isAlpha(c[0])) {
+        track = (toupper(c[0]) - 'A') + 1;         // 001–026
+    } 
+    else if (c.length() == 1 && isDigit(c[0])) {
+        track = (c[0] - '0') + 33;                // 033–042
+    }
+    else if (c == "_") {
+        track = 27;  // space
+    }
+    else if (c == "<") {
+        track = 28;  // backspace
+    }
+    else if (c == ".") {
+        track = 29;  // message cleared
+    }
+    else if (c == "toilet") {
+        track = 30;
+    }
+    else if (c == "food") {
+        track = 31;
+    }
+    else if (c == "doctor") {
+        track = 32;
+    }
 
-//     if (track > 0) {
-//         myDFPlayer.play(track);
-//     }
-// }
+    if (track > 0) {
+        Serial.print("[DFPlayer] speakCharacter: Playing track ");
+        Serial.print(track);
+        Serial.print(" (audio: ");
+        if (c.length() == 1 && isAlpha(c[0])) {
+            Serial.print("letter "); Serial.print((char)toupper(c[0]));
+        } else if (c.length() == 1 && isDigit(c[0])) {
+            Serial.print("number "); Serial.print(c);
+        } else if (c == "_") {
+            Serial.print("space");
+        } else if (c == "<") {
+            Serial.print("backspace");
+        } else if (c == ".") {
+            Serial.print("message cleared");
+        } else if (c == "toilet" || c == "food" || c == "doctor") {
+            Serial.print(c);
+        } else {
+            Serial.print("unknown");
+        }
+        Serial.println(")");
+        myDFPlayer.play(track);
+        
+    }
+}
 
 
 // --- Blink event: single blink ---
@@ -162,14 +210,14 @@ void gui3OnSingleBlink() {
         popupIndex = (popupIndex + 1) % popupCount;
         drawPopup(); // redraw all, only one is navy blue
         popupStartTime = millis(); // reset timer
-      //  playSound(50);
+        playSound(43);
     } else if (!popupActive) {
         // Move to next cell (cyclic)
         int prevCell = selectedCell;
         selectedCell = (selectedCell + 1) % 12;
         drawButton(prevCell, false, false); // white border
         highlightCell(selectedCell); // yellow border
-      //  playSound(50);
+        playSound(43);
     }
 }
 
@@ -185,7 +233,7 @@ void gui3OnDoubleBlink() {
         popupIndex = 0;
         drawPopup();
         popupStartTime = millis();
-       // playSound(51);
+        playSound(44);
     } else if (popupActive && popupSelecting) {
         // Double blink in popup: select current popup button, add to message bar, clear popup
         drawPopupSelection(popupIndex); // green highlight
@@ -210,8 +258,9 @@ void gui3OnDoubleBlink() {
             
         }
         drawMessageBox();
-      //  speakCharacter(sel);
-      //  playSound(51);
+        playSound(44);
+        delay(800);
+        speakCharacter(sel);
         clearPopupText();
         drawButton(selectedCell, false, false); // white border
         highlightCell(selectedCell);
