@@ -1,10 +1,13 @@
-#include "setting_2.h"
+#include "setting.h"
+
+#include "../../include/common_variables.h"
+
+#include "../network/blink_wifi.h"
+
 #include <EEPROM.h>
+#include <Preferences.h>
 #include <TFT_eSPI.h>
 #include <SPI.h>
-#include <Preferences.h>
-#include "variable.h"
-#include "blink_wifi.h"
 
 
 extern Preferences prefs;

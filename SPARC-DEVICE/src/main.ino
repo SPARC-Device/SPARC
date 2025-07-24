@@ -1,9 +1,10 @@
-#include "blink_wifi.h"
-#include "gui_3.h"
-#include "setting_2.h"
-#include "notif.h"
+#include "gui/gui.h"
+#include "network/blink_wifi.h"
+#include "settings/setting.h"
+#include "notifications/notif.h"
+#include "../include/common_variables.h"
+
 #include <WiFi.h>
-#include "variable.h"
 
 int uiState = 0;
 bool tftConnected = true;

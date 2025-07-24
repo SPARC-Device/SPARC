@@ -1,12 +1,13 @@
 #include "blink_wifi.h"
+
+#include "../settings/setting.h"
+#include "../notifications/notif.h"
+#include "../../include/common_variables.h"
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Preferences.h>
-#include "setting_2.h" // For userId
-#include "notif.h" // For sendNotificationRequest
 #include <EEPROM.h>
-#include "variable.h"
-
 
 // Pin assignments (update as needed)
 static const int IR_SENSOR_PIN = 36;

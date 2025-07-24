@@ -1,9 +1,13 @@
-#include "gui_3.h"
-#include "emoji_arrays.h"
-#include "emoji_arrays3.h"
+#include "gui.h"
+
+#include "../../include/emoji/emoji_arrays.h"
+#include "../../include/emoji/emoji_arrays3.h"
+
+#include "../notifications/notif.h"
+
+#include "../../include/common_variables.h"
+
 #include <TFT_eSPI.h>
-#include "notif.h" // Add this include
-#include "variable.h"
 #include <DFRobotDFPlayerMini.h>
 #include <HardwareSerial.h>
 
