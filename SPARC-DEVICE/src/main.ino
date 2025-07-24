@@ -1,6 +1,6 @@
 #include "gui/gui.h"
 #include "network/blink_wifi.h"
-#include "settings/setting.h"
+#include "settings/settings.h"
 #include "notifications/notif.h"
 #include "../include/common_variables.h"
 

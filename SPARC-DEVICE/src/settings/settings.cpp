@@ -1,4 +1,4 @@
-#include "setting.h"
+#include "settings.h"
 
 #include "../../include/common_variables.h"
 
