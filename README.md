@@ -63,8 +63,8 @@ The complete system integrates:
 ## Software Requirements
 
 - **SPARC-DEVICE:** C++/C Arduino firmware (in `SPARC-DEVICE/`)
-- **SPARC-GUI:** Python 3.x, PyQt5, pyttsx3 (see [SPARC-GUI](../SPARC-GUI))
-- **SPARC-Notify:** Android app (Kotlin), Firebase Cloud Messaging (see [SPARC-Notify](../SPARC-Notify))
+- **SPARC-GUI:** Python 3.x, PyQt5, pyttsx3
+- **SPARC-Notify:** Android app (Kotlin), Firebase Cloud Messaging
 - **notif-server:** Proxy server for message routing (setup instructions forthcoming)
 
 ---
