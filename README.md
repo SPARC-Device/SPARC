@@ -53,11 +53,29 @@ The complete system integrates:
 
 ## Hardware Requirements
 
-- **Microcontroller:** ESP32
-- **IR Sensor:** For blink detection
-- **TFT Display:** For navigation and message selection
-- **Power Supply:** Standard USB or battery power
+- ESP32 – Main microcontroller, handles all processing and connectivity.
 
+- TFT Display – For GUI navigation and message selection.
+
+- IR Sensor – Detects user blinks, mounted on spectacles.
+
+- Spectacle Frame – Holds the IR sensor for eye-level blink detection.
+
+- Buzzer – Triggers emergency alarms when needed.
+
+- Red LED – Indicates emergency mode status.
+
+- Blink LED – Blinks on every detected eye blink.
+
+- DFPlayer MP3 Module with SD Card – Stores and plays audio files for message feedback.
+
+- Speaker – Outputs audio from DFPlayer.
+
+- Push Button – Used to manually turn off emergency mode.
+
+- Resistor – Pull-up resistor for stable push button input.
+
+- Power Supply: Standard USB or battery power
 ---
 
 ## Software Requirements
