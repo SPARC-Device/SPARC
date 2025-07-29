@@ -76,6 +76,11 @@ The complete system integrates:
 - Resistor – Pull-up resistor for stable push button input.
 
 - Power Supply: Standard USB or battery power
+
+<p align="center">
+  <img src="./assets/schematic-diagram.jpg" width="400"/>
+</p>
+
 ---
 
 ## Software Requirements
