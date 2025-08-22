@@ -1,6 +1,6 @@
 [submodule "SPARC-Notify"]
 	path = SPARC-Notify
-	url = https://github.com/FrankTheSssnake/SPARC-Notify
+	url = https://github.com/SPARC-Device/SPARC-Notify.git
 [submodule "SPARC-GUI"]
 	path = SPARC-GUI
-	url = https://github.com/FrankTheSssnake/SPARC-GUI
+	url = https://github.com/SPARC-Device/SPARC-GUI.git
